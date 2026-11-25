@@ -1145,7 +1145,7 @@ function renderSheet() {
   let block = play ? null : sheet;
   let markFirst = false;
   let pendingLabel = null;
-  const inlineLabels = play && settings.cols !== false;
+  const inlineLabels = play && settings.cols === false;   // jeden sloupec: štítek vpravo na řádku s textem
   let markShort = false;
   const newBlock = () => { block = h('div', { class: 'sec-block' }); sheet.append(block); };
   song.lines.forEach((line, li) => {
@@ -1162,7 +1162,7 @@ function renderSheet() {
           onClick: () => openSectionPopover(lab, li),
         }));
       }
-      // ve sloupcích štítek na stejný řádek jako první řádek textu (vpravo), jinak nad část
+      // v jednom sloupci štítek na stejný řádek jako první řádek textu (vpravo), ve sloupcích nad část
       if (inlineLabels) pendingLabel = lab;
       else block.append(h('div', { class: 'sec-head' }, lab));
       markFirst = true;
