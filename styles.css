@@ -809,3 +809,10 @@ body.al-editing .al-yt { bottom: 236px; }
 .sl-ico .ico svg { width: 23px; height: 23px; }
 .sl-ico { width: 40px; height: 40px; }
 .capo-on { border-color: var(--d1); background: color-mix(in srgb, var(--d1) 14%, var(--surface)); }
+.capo-pick { display: grid; gap: 6px; min-width: 240px; }
+.capo-opt { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: baseline; text-align: left; border: 1.5px solid var(--line); background: var(--surface); border-radius: 12px; padding: 8px 12px; cursor: pointer; font: inherit; color: var(--ink); }
+.capo-opt:hover { border-color: var(--ink); }
+.capo-opt.on { border-color: var(--d1); background: color-mix(in srgb, var(--d1) 14%, var(--surface)); }
+.capo-opt b { font-size: 15px; }
+.capo-opt span { font-size: 14px; }
+.capo-opt small { grid-column: 2; color: var(--muted); font-size: 12px; }

@@ -21,27 +21,27 @@ function h(tag, attrs = {}, ...kids) {
   }
   return el;
 }
-
-// ---------- vlastní ikony (čárové SVG, barva podle textu) ----------
-const ICONS = {
-  headphones: '<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/>',
-  copy: '<rect x="8" y="8" width="12" height="13" rx="3"/><path d="M16 8V6a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h1"/>',
-  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.8 2.6 4 5.6 4 9s-1.2 6.4-4 9c-2.8-2.6-4-5.6-4-9s1.2-6.4 4-9z"/>',
-  lock: '<rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><circle cx="12" cy="16" r="1.2" fill="currentColor" stroke="none"/>',
-  save: '<path d="M5 4h11l3 3v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M8 4v5h7V4"/><rect x="8" y="13" width="8" height="5" rx="1"/>',
-  pencil: '<path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z"/><path d="M14 7l3 3"/>',
-  trash: '<path d="M4 7h16"/><path d="M9 7V4.8A.8.8 0 0 1 9.8 4h4.4a.8.8 0 0 1 .8.8V7"/><path d="M6.5 7l1 12.2A2 2 0 0 0 9.5 21h5a2 2 0 0 0 2-1.8L17.5 7"/><path d="M10 11v6M14 11v6"/>',
+
+// ---------- vlastní ikony (čárové SVG, barva podle textu) ----------
+const ICONS = {
+  headphones: '<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/>',
+  copy: '<rect x="8" y="8" width="12" height="13" rx="3"/><path d="M16 8V6a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h1"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.8 2.6 4 5.6 4 9s-1.2 6.4-4 9c-2.8-2.6-4-5.6-4-9s1.2-6.4 4-9z"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><circle cx="12" cy="16" r="1.2" fill="currentColor" stroke="none"/>',
+  save: '<path d="M5 4h11l3 3v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M8 4v5h7V4"/><rect x="8" y="13" width="8" height="5" rx="1"/>',
+  pencil: '<path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z"/><path d="M14 7l3 3"/>',
+  trash: '<path d="M4 7h16"/><path d="M9 7V4.8A.8.8 0 0 1 9.8 4h4.4a.8.8 0 0 1 .8.8V7"/><path d="M6.5 7l1 12.2A2 2 0 0 0 9.5 21h5a2 2 0 0 0 2-1.8L17.5 7"/><path d="M10 11v6M14 11v6"/>',
   guitar: '<path d="M13.6 10.4 20.2 3.8"/><path d="M18.6 2.2l3.2 3.2"/><path d="M10.4 8.6c-1.6-.7-3.6-.2-4.6 1.1-.7.9-.9 2-.6 2.9-1.6.2-2.9 1.6-3 3.3-.2 2.5 1.9 4.7 4.4 4.6 1.8-.1 3.1-1.4 3.3-3 .9.3 2 .1 2.9-.6 1.3-1 1.8-3 1.1-4.6z"/><circle cx="8.2" cy="15.8" r="1.5"/><path d="M11.4 12.6l1.6-1.6"/>',
-  chords: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 8h14M5 13h14M9.7 3v18M14.3 3v18"/><circle cx="9.7" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="14.3" cy="15.5" r="1.5" fill="currentColor" stroke="none"/>',
-};
-/** ikona jako <span> s SVG (obsah je pevný, ne od uživatele) */
-function ico(name) {
-  const s = document.createElement('span');
-  s.className = 'ico';
-  s.innerHTML = `<svg viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
-  return s;
-}
-
+  chords: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 8h14M5 13h14M9.7 3v18M14.3 3v18"/><circle cx="9.7" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="14.3" cy="15.5" r="1.5" fill="currentColor" stroke="none"/>',
+};
+/** ikona jako <span> s SVG (obsah je pevný, ne od uživatele) */
+function ico(name) {
+  const s = document.createElement('span');
+  s.className = 'ico';
+  s.innerHTML = `<svg viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+  return s;
+}
+
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const mod = n => ((n % 12) + 12) % 12;
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -1526,35 +1526,47 @@ function transpose(n) {
 }
 // akordy, které jdou na kytaru snadno (otevřené tvary)
 const EASY_CHORDS = new Set(['0:', '2:', '4:', '7:', '9:', '9:m', '4:m', '2:m', '0:7', '2:7', '4:7', '7:7', '9:7', '11:7', '9:m7', '4:m7', '2:m7', '0:maj7', '5:maj7']);
+/** varianty kapodastru seřazené od nejlehčí: { capo, easy (podíl snadných akordů), key (v jaké tónině hraješ tvary) } */
+function capoOptions(song) {
+  const all = song.lines.flatMap(l => l.chords).map(c => ({ root: mod(c.root + viewShift), q: c.q || '' }));
+  const opts = [];
+  for (let capo = 0; capo <= 7; capo++) {
+    const easy = all.length ? all.filter(c => EASY_CHORDS.has(mod(c.root - capo) + ':' + c.q)).length / all.length : 0;
+    opts.push({ capo, easy, key: { ...song.key, root: mod(song.key.root + viewShift - capo) }, score: easy - capo * 0.02 });
+  }
+  return opts.sort((a, b) => b.score - a.score);
+}
 /** nejlepší pražec pro kapodastr: co nejvíc snadných akordů, raději nízko */
 function bestCapo(song) {
-  const all = song.lines.flatMap(l => l.chords).map(c => ({ root: mod(c.root + viewShift), q: c.q || '' }));
-  if (!all.length) return 0;
-  let best = 0, bestScore = -1;
-  for (let capo = 0; capo <= 7; capo++) {
-    const easy = all.filter(c => EASY_CHORDS.has(mod(c.root - capo) + ':' + c.q)).length;
-    const score = easy / all.length - capo * 0.02;
-    if (score > bestScore + 1e-9) { best = capo; bestScore = score; }
-  }
-  return best;
+  const best = capoOptions(song)[0];
+  return best && best.easy > 0 ? best.capo : 0;
+}
+/** nabídka víc variant kapodastru */
+function openCapoPicker(anchor) {
+  const song = current();
+  const opts = capoOptions(song).filter(o => o.capo !== 0 && o.easy >= 0.35).slice(0, 4);   // jen varianty, které opravdu pomůžou
+  if (!opts.some(o => o.capo === 0)) opts.push(capoOptions(song).find(o => o.capo === 0));
+  const row = o => h('button', {
+    class: 'capo-opt' + (o.capo === viewCapo ? ' on' : ''),
+    onclick: () => { closePopover(); setCapo(o.capo); },
+  },
+    h('b', {}, o.capo ? `Kapo ${o.capo}` : 'Bez kapa'),
+    h('span', {}, `hraješ jako ${keyName(o.key)}`),
+    h('small', {}, `${Math.round(o.easy * 100)} % snadných akordů`));
+  openPopover(anchor, h('div', { class: 'capo-pick' },
+    h('h5', {}, 'Kapodastr – vyber variantu'),
+    ...opts.map(row)));
 }
 function setCapo(n) {
   viewCapo = Math.max(0, Math.min(9, n));
   rerenderView();
 }
-function toggleCapo() {
-  if (viewCapo) { setCapo(0); return; }
-  const c = bestCapo(current());
-  if (!c) { toast('Tahle tónina se hraje snadno i bez kapodastru 👍'); return; }
-  setCapo(c);
-  toast(`Dej kapodastr na ${c}. pražec – akordy jsou přepsané na jednodušší tvary`);
-}
 /** ovládání kapodastru (do lišty při hraní a v play-along) */
 function capoControl() {
-  if (!viewCapo) return h('button', { class: 'tbtn', title: 'Najde pražec pro kapodastr, aby se hrály co nejjednodušší akordy', onclick: toggleCapo }, 'Kapo');
+  if (!viewCapo) return h('button', { class: 'tbtn', title: 'Vyber kapodastr – nabídne varianty s nejjednoduššími akordy', onclick: e => openCapoPicker(e.currentTarget) }, 'Kapo');
   return h('div', { class: 'tgroup capo-on', title: 'Kapodastr – akordy jsou tvary, které hraješ s kapem' },
     h('button', { onclick: () => setCapo(viewCapo - 1), 'aria-label': 'O pražec níž' }, '−'),
-    h('button', { class: 'tr-val moved', onclick: () => setCapo(0), title: 'Klik vypne kapodastr' }, `Kapo ${viewCapo}`),
+    h('button', { class: 'tr-val moved', onclick: e => openCapoPicker(e.currentTarget), title: 'Jiná varianta / vypnout' }, `Kapo ${viewCapo}`),
     h('button', { onclick: () => setCapo(viewCapo + 1), 'aria-label': 'O pražec výš' }, '+'));
 }
 const viewCache = new WeakMap();
@@ -1796,7 +1808,7 @@ function openPopover(anchor, content) {
 function closePopover() { const p = $('#popover'); if (p) { p.hidden = true; p.innerHTML = ''; } }
 document.addEventListener('pointerdown', e => {
   const p = $('#popover');
-  if (!p.hidden && !p.contains(e.target) && !e.target.closest('.chord, .sec-label, .key-pill, .chip.add')) closePopover();
+  if (!p.hidden && !p.contains(e.target) && !e.target.closest('.chord, .sec-label, .key-pill, .chip.add, .capo-btn')) closePopover();
 });
 
 const QUALS = ['', 'm', '7', 'm7', 'maj7', 'sus2', 'sus4', 'add9', 'dim', 'aug', '6', '9'];
