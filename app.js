@@ -577,7 +577,7 @@ function renderLibrary() {
       h('p', {}, shared
         ? 'Písničky s akordy pro všechny. Přihlaš se a přidej svoje.'
         : 'Vlož text, vyber tóninu a přetáhni akordy přímo nad slova.')),
-    h('button', { class: 'btn rainbow big', onclick: addSong }, '+ Přidat song')));
+    h('button', { class: 'btn add-btn big', onclick: addSong }, '+ Přidat song')));
 
   if (shared && auth.user && auth.localOnly.length) {
     wrap.append(h('div', { class: 'banner' },
@@ -1071,7 +1071,7 @@ function renderEditor() {
         toast(song.isPublic ? 'Song je veřejný' : 'Song vidíš jen ty');
       },
     }, song.isPublic === false ? '🔒 Jen pro mě' : '🌍 Veřejný'),
-    play && h('a', { class: 'btn al-btn', href: '#along-' + song.id, title: 'Play-along: hudba, text se přebarvuje podle zpěvu a akordy svítí' }, '🎵 Play-along'),
+    play && h('a', { class: 'btn al-btn', href: '#along-' + song.id, title: 'Play-along: hudba, text se přebarvuje podle zpěvu a akordy svítí' }, '🎸 Play-along'),
     play
       ? (editable ? h('a', { class: 'btn primary', href: '#song-' + song.id }, '✎ Upravit') : null)
       : h('button', {
