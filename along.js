@@ -1,6 +1,6 @@
 'use strict';
 /* =========================================================
-   Kytara s Bobem – Play-along
+   playalong.cz – Play-along
    Přehrávání s textem, který se přebarvuje podle zpěvu, a akordy,
    které se rozsvítí ve chvíli, kdy hrají. Režim „Doladit“ = časová osa,
    kde se slova, řádky a akordy dají posunout tažením.

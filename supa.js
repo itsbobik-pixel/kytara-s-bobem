@@ -1,6 +1,6 @@
 'use strict';
 /* =========================================================
-   Kytara s Bobem – společný zpěvník přes Supabase
+   playalong.cz – společný zpěvník přes Supabase
    Aktivuje se jen když config.js obsahuje URL + publishable key.
    Používá globální proměnné z app.js (songs, render, toast, h…).
    ========================================================= */

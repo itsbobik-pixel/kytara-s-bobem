@@ -1,6 +1,6 @@
 'use strict';
 /* =========================================================
-   Kytara s Bobem – zpěvník s drag & drop akordy
+   playalong.cz – zpěvník s drag & drop akordy
    ========================================================= */
 
 // ---------- helpers ----------
@@ -660,7 +660,7 @@ každej zpívá falešně, ale nikdo to nevnímá.
 
 async function exportSongs() {
   const json = JSON.stringify({ app: 'kytara-s-bobem', version: 1, songs }, null, 2);
-  const filename = 'kytara-s-bobem-zaloha.json';
+  const filename = 'playalong-zaloha.json';
   const dl = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
   if (dl) {
     try { await dl.save({ filename, data: json }); } catch { toast('Záloha se neuložila'); }
@@ -687,7 +687,7 @@ function importSongs() {
         added++;
       }
       saveSongs(); renderLibrary(); toast(`Nahráno ${added} songů`);
-    } catch { toast('Tohle nevypadá jako záloha Kytary s Bobem'); }
+    } catch { toast('Tohle nevypadá jako záloha z playalong.cz'); }
   };
   inp.click();
 }

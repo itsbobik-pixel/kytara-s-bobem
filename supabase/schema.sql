@@ -1,5 +1,5 @@
 -- =========================================================
---  Kytara s Bobem – databáze (Supabase / Postgres)
+--  playalong.cz – databáze (Supabase / Postgres)
 --  Spusť celé v Supabase: SQL Editor → New query → Run.
 --
 --  Pravidla:

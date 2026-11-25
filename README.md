@@ -1,4 +1,4 @@
-# 🎸 Kytara s Bobem
+# 🎸 playalong.cz
 
 Barevný zpěvník: vlož text písničky, vyber tóninu a **přetáhni akordy** přímo nad slova. Stejně tak přetáhneš i části písně (intro, sloka, refrén…).
 

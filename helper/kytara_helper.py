@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Kytara s Bobem – lokální pomocník.
+playalong.cz – lokální pomocník.
 
 Běží jen na tvém počítači (127.0.0.1) a dělá dvě věci:
   1. /audio?url=<YouTube odkaz>  stáhne zvukovou stopu (yt-dlp) a pošle ji appce,
@@ -183,7 +183,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 def main():
     server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
-    print("🎸 Kytara s Bobem – pomocník běží")
+    print("🎸 playalong.cz – pomocník běží")
     print(f"   Appka:   http://{HOST}:{PORT}/")
     print("   Ukončení: Ctrl+C nebo zavři tohle okno\n")
     try:

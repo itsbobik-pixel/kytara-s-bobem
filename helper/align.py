@@ -1,4 +1,4 @@
-"""Kytara s Bobem – zarovnání textu písničky k nahrávce.
+"""playalong.cz – zarovnání textu písničky k nahrávce.
 
 Postup:
   1. Demucs oddělí vokál a doprovod (vocals.wav, no_vocals.wav).
