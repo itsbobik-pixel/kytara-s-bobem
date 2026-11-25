@@ -149,7 +149,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             shutil.rmtree(workdir, ignore_errors=True)
 
     def log_message(self, fmt, *args):  # tišší výpis
-        if "/health" not in (args[0] if args else ""):
+        if "/health" not in str(args[0] if args else ""):
             sys.stderr.write("   " + fmt % args + "\n")
 
 

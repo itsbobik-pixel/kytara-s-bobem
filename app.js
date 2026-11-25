@@ -809,7 +809,9 @@ function audioPanel(state, onPick, onTitle) {
       const url = ytIn.value.trim();
       if (!/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(url)) { setStatus('Tohle nevypadá jako odkaz na YouTube.', true); return; }
       if (!(await helperAlive())) {
-        setStatus('YouTube potřebuje pomocníka na tvém počítači: spusť „spustit-pomocnika.bat“ a zkus to znovu.', true);
+        setStatus(location.protocol === 'https:'
+          ? 'Pomocník nereaguje. Spusť „spustit-pomocnika.bat“ a až se prohlížeč zeptá na přístup k místní síti, povol ho. Případně otevři appku na http://127.0.0.1:5174/.'
+          : 'YouTube potřebuje pomocníka na tvém počítači: spusť „spustit-pomocnika.bat“ a zkus to znovu.', true);
         return;
       }
       run(async () => {
