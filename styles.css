@@ -309,7 +309,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 }
 .line[data-s] { border-left-color: var(--sc); background: color-mix(in srgb, var(--sc) 6%, transparent); }
 .line.empty-line { line-height: 2.2; min-height: 2.2em; }
-.line.instr .c.pad { width: .62em; }
+.line.instr .c.pad { width: .8em; }
 .c { position: relative; }
 .c.pad { display: inline-block; width: .55em; line-height: 1.25; }
 .edit .c { cursor: text; }

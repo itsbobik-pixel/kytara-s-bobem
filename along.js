@@ -59,7 +59,12 @@ function buildModel(song, sync) {
   });
   // řádky jen s akordy (intro, mezihra): rozprostři mezi sousední zpívané řádky
   lines.forEach((L, i) => {
-    if (L.s != null || !L.chords.length || L.chords.every(c => c.t != null)) return;
+    if (L.s != null || !L.chords.length) return;
+    if (L.chords.every(c => c.t != null)) {   // mezihra s časy akordů → řádek trvá od prvního akordu
+      const ts = L.chords.map(c => c.t);
+      L.s = Math.min(...ts); L.e = Math.max(...ts) + 1.5;
+      return;
+    }
     const prev = lines.slice(0, i).reverse().find(x => x.e != null);
     const next = lines.slice(i + 1).find(x => x.s != null);
     const a = prev ? prev.e : 0, b = next ? next.s : a + 4;
