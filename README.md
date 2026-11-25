@@ -13,7 +13,25 @@ Barevný zpěvník: vlož text písničky, vyber tóninu a **přetáhni akordy**
 - **Tónina z nahrávky:** nahraj MP3 (nebo m4a, wav…) a appka v prohlížeči pozná tóninu, nabídne 3 nejpravděpodobnější a tip na kapodastr. Soubor se nikam neposílá.
 - **Tónina z YouTube:** funguje, když na počítači běží lokální pomocník (viz níže).
 
-Songy se zatím ukládají v prohlížeči (localStorage). Zálohu stáhneš tlačítkem **⬇ Záloha**.
+## Společný zpěvník (Supabase)
+
+Songy jsou v databázi [Supabase](https://supabase.com) a **vidí je všichni**. Přidávat může jen přihlášený (odkazem z e-mailu, bez hesla). Upravit a smazat song smí jen ten, kdo ho přidal, nebo admin. Song jde přepnout na **🔒 Jen pro mě**.
+
+Nastavení (jednou):
+
+1. V Supabase otevři **SQL Editor → New query**, vlož celý [supabase/schema.sql](supabase/schema.sql) a dej **Run**.
+2. **Authentication → URL Configuration**:
+   - *Site URL*: `https://itsbobik-pixel.github.io/kytara-s-bobem/`
+   - *Redirect URLs*: přidej `https://itsbobik-pixel.github.io/kytara-s-bobem/`, `http://127.0.0.1:5174/` a `http://localhost:5173/`
+3. Přihlas se na webu. Pak se udělej adminem v SQL Editoru (dosaď svůj e-mail):
+   ```sql
+   insert into public.admins (user_id)
+   select id from auth.users where email = 'TVUJ@EMAIL.CZ';
+   ```
+
+Adresa projektu a veřejný (publishable) klíč jsou v [config.js](config.js). Klíč `sb_secret_…` do webu nikdy nepatří.
+
+Bez `config.js` (nebo ve verzi na claude.ai) se songy ukládají jen v prohlížeči, popř. do cloudu claude.ai.
 
 ## Lokální pomocník pro YouTube
 

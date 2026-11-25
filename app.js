@@ -38,8 +38,21 @@ let songs = load(LS_SONGS, []);
 const settings = Object.assign({ notation: 'cz', fontSize: 19 }, load(LS_SETTINGS, {}));
 const saveSettings = () => persist(LS_SETTINGS, settings);
 function saveSongs() {
+  if (auth.mode === 'supabase') { window.KSB_SUPA.schedule(); return; }
   persist(LS_SONGS, songs);
   cloud.schedule();
+}
+
+// ---------- kdo je přihlášený a co smí ----------
+// mode 'local' = vše v prohlížeči (nebo claude.ai cloud), 'supabase' = společný zpěvník
+const auth = { mode: 'local', user: null, admin: false, name: '', loading: false, localOnly: [] };
+const canEdit = s => auth.mode !== 'supabase' || (!!auth.user && (!s.owner || s.owner === auth.user.id || auth.admin));
+const canCreate = () => auth.mode !== 'supabase' || !!auth.user;
+const isPlay = s => route.mode === 'play' || !canEdit(s);
+function needLogin(reason) {
+  if (canCreate()) return false;
+  window.KSB_SUPA.openLogin(reason);
+  return true;
 }
 
 // ---------- cloud (jen když běží jako claude.ai Artifact) ----------
@@ -446,7 +459,10 @@ function render() {
   stopAutoscroll();
   armed = null;
   route = parseHash();
-  if (route.view === 'song' && !current()) { go('#'); return; }
+  if (route.view === 'song' && !current()) {
+    if (auth.loading) { $('#app').innerHTML = '<div class="wrap"><div class="empty"><div class="big-emoji">🎸</div><h2>Načítám song…</h2></div></div>'; return; }
+    go('#'); return;
+  }
   document.documentElement.style.setProperty('--fs', settings.fontSize + 'px');
   if (route.view === 'song') renderEditor(); else renderLibrary();
 }
@@ -459,7 +475,13 @@ function renderTopActions(extra = []) {
   box.innerHTML = '';
   box.append(
     h('span', { id: 'syncStatus', class: 'sync' }, statusText),
-    ...extra,
+    ...extra.filter(Boolean),
+    auth.mode === 'supabase' && (auth.user
+      ? h('button', {
+          class: 'btn ghost user-btn', title: 'Klikni pro odhlášení',
+          onclick: () => window.KSB_SUPA.logout(),
+        }, '👤 ', auth.name || 'Já', auth.admin ? h('small', {}, ' admin') : null)
+      : h('button', { class: 'btn primary', onclick: () => window.KSB_SUPA.openLogin() }, 'Přihlásit')),
     h('button', {
       class: 'btn ghost', title: 'Přepnout značení (česky H / anglicky B)',
       onclick: () => { settings.notation = settings.notation === 'cz' ? 'intl' : 'cz'; saveSettings(); render(); },
@@ -476,26 +498,44 @@ let searchQ = '';
 function renderLibrary() {
   const app = $('#app');
   app.innerHTML = '';
+  const shared = auth.mode === 'supabase';
   renderTopActions([
-    h('button', { class: 'btn ghost', onclick: exportSongs, title: 'Stáhnout zálohu všech songů' }, '⬇ Záloha'),
-    h('button', { class: 'btn ghost', onclick: importSongs, title: 'Nahrát zálohu' }, '⬆ Nahrát'),
+    canCreate() && h('button', { class: 'btn ghost', onclick: exportSongs, title: 'Stáhnout zálohu songů' }, '⬇ Záloha'),
+    canCreate() && h('button', { class: 'btn ghost', onclick: importSongs, title: 'Nahrát zálohu' }, '⬆ Nahrát'),
   ]);
 
+  const addSong = () => { if (!needLogin('Pro přidání songu se přihlas. Číst může kdokoli.')) openSongModal(); };
   const wrap = h('div', { class: 'wrap' });
   wrap.append(h('section', { class: 'hero' },
     h('div', {},
-      h('h1', {}, 'Tvoje ', h('span', { class: 'hl' }, 'songy')),
-      h('p', {}, 'Vlož text, vyber tóninu a přetáhni akordy přímo nad slova.')),
-    h('button', { class: 'btn rainbow big', onclick: () => openSongModal() }, '+ Přidat song')));
+      shared
+        ? h('h1', {}, 'Společný ', h('span', { class: 'hl' }, 'zpěvník'))
+        : h('h1', {}, 'Tvoje ', h('span', { class: 'hl' }, 'songy')),
+      h('p', {}, shared
+        ? 'Písničky s akordy pro všechny. Přihlaš se a přidej svoje.'
+        : 'Vlož text, vyber tóninu a přetáhni akordy přímo nad slova.')),
+    h('button', { class: 'btn rainbow big', onclick: addSong }, '+ Přidat song')));
+
+  if (shared && auth.user && auth.localOnly.length) {
+    wrap.append(h('div', { class: 'banner' },
+      h('span', {}, `V tomhle prohlížeči máš ${auth.localOnly.length} songů, které ještě nejsou ve zpěvníku.`),
+      h('button', { class: 'btn primary', onclick: () => window.KSB_SUPA.importLocal() }, 'Nahrát do zpěvníku')));
+  }
+
+  if (auth.loading) {
+    wrap.append(h('div', { class: 'empty' }, h('div', { class: 'big-emoji' }, '🎸'), h('h2', {}, 'Načítám zpěvník…')));
+    app.append(wrap);
+    return;
+  }
 
   if (!songs.length) {
     wrap.append(h('div', { class: 'empty' },
       h('div', { class: 'big-emoji' }, '🎸'),
       h('h2', {}, 'Zatím tu nic není'),
-      h('p', {}, 'Přidej první song, nebo si nahraj ukázku a zkus si, jak to funguje.'),
+      h('p', {}, shared ? 'Buď první, kdo sem přidá písničku.' : 'Přidej první song, nebo si nahraj ukázku a zkus si, jak to funguje.'),
       h('div', { class: 'row' },
-        h('button', { class: 'btn primary big', onclick: () => openSongModal() }, '+ Přidat song'),
-        h('button', { class: 'btn big', onclick: addDemo }, 'Nahrát ukázku'))));
+        h('button', { class: 'btn primary big', onclick: addSong }, '+ Přidat song'),
+        !shared && h('button', { class: 'btn big', onclick: addDemo }, 'Nahrát ukázku'))));
     app.append(wrap);
     return;
   }
@@ -512,7 +552,7 @@ function renderLibrary() {
     const q = searchQ.trim().toLowerCase();
     const list = [...songs]
       .sort((a, b) => (b.updated || 0) - (a.updated || 0))
-      .filter(s => !q || (s.title + ' ' + (s.artist || '')).toLowerCase().includes(q));
+      .filter(s => !q || (s.title + ' ' + (s.artist || '') + ' ' + (s.author || '')).toLowerCase().includes(q));
     if (!list.length) grid.append(h('p', { style: 'color:var(--muted)' }, 'Nic nenalezeno.'));
     list.forEach(s => {
       const color = CARD_COLORS[mod(songs.indexOf(s)) % CARD_COLORS.length];
@@ -523,7 +563,7 @@ function renderLibrary() {
         onclick: () => go('#song-' + s.id),
         onkeydown: e => { if (e.key === 'Enter') go('#song-' + s.id); },
       },
-        h('button', {
+        canEdit(s) && h('button', {
           class: 'del', title: 'Smazat song', 'aria-label': 'Smazat song',
           onclick: e => {
             e.stopPropagation();
@@ -537,6 +577,8 @@ function renderLibrary() {
         h('div', { class: 'artist' }, s.artist || '—'),
         h('div', { class: 'meta' },
           h('span', { class: 'badge key' }, keyShort(s.key)),
+          s.isPublic === false && h('span', { class: 'badge', title: 'Vidíš jen ty' }, '🔒'),
+          s.author && h('span', { class: 'badge author', title: 'Přidal(a)' }, s.author),
           h('span', { class: 'badge' }, chordCount + ' akordů'),
           h('span', { class: 'sec-dots' }, secs.map(t => h('i', { 'data-s': t, style: 'background:var(--sc)', title: secLabel(t) }))))));
     });
@@ -911,7 +953,8 @@ function keyPicker(key, onPick) {
 function renderEditor() {
   const song = current();
   if (!song) return;
-  const play = route.mode === 'play';
+  const play = isPlay(song);
+  const editable = canEdit(song);
   const app = $('#app');
   const scrollY = window.scrollY;
   app.innerHTML = '';
@@ -948,11 +991,22 @@ function renderEditor() {
       h('button', { onclick: () => setSpeed(1) }, '+')),
     !play && h('button', { class: 'btn', onclick: () => openSongModal(song) }, '✎ Text'),
     !play && h('button', { class: 'btn', onclick: copyText, title: 'Zkopírovat jako text s akordy' }, '⧉ Kopírovat'),
+    !play && auth.mode === 'supabase' && h('button', {
+      class: 'btn', title: song.isPublic === false ? 'Teď ho vidíš jen ty. Klikni pro zveřejnění.' : 'Teď ho vidí všichni. Klikni a uvidíš ho jen ty.',
+      onclick: () => {
+        song.isPublic = song.isPublic === false;
+        touch(song); renderEditor();
+        toast(song.isPublic ? 'Song je veřejný' : 'Song vidíš jen ty');
+      },
+    }, song.isPublic === false ? '🔒 Jen pro mě' : '🌍 Veřejný'),
     play
-      ? h('a', { class: 'btn primary', href: '#song-' + song.id }, '✎ Upravit')
+      ? (editable ? h('a', { class: 'btn primary', href: '#song-' + song.id }, '✎ Upravit') : null)
       : h('a', { class: 'btn rainbow', href: '#play-' + song.id }, '▶ Hrát'));
 
-  ed.append(h('div', { class: 'song-head' }, h('div', { class: 'titles' }, titleIn, artistIn), controls));
+  ed.append(h('div', { class: 'song-head' },
+    h('div', { class: 'titles' }, titleIn, artistIn,
+      song.author && auth.mode === 'supabase' ? h('div', { class: 'by' }, 'přidal(a) ', h('b', {}, song.author)) : null),
+    controls));
 
   if (!play) ed.append(renderPalette(song));
   const sheet = h('div', { class: 'sheet', id: 'sheet' });
@@ -1003,7 +1057,7 @@ function renderSheet() {
   const song = current();
   const sheet = $('#sheet');
   if (!song || !sheet) return;
-  const play = route.mode === 'play';
+  const play = isPlay(song);
   sheet.innerHTML = '';
   let sec = null;
   const counts = {};
@@ -1474,4 +1528,4 @@ document.addEventListener('keydown', e => {
 });
 
 render();
-cloud.init();
+if (window.KSB_SUPA) window.KSB_SUPA.init(); else cloud.init();
