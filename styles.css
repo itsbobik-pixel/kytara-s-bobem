@@ -596,3 +596,26 @@ body.playing .topbar { display: none; }
 .line.instr { white-space: nowrap; }
 .play .sec-block { padding-top: .4em; }
 .play .line.instr .c.pad { width: .42em; }
+
+/* =========================================================
+   Štítky částí zpátky nahoru vlevo (jako původně), pruh vlevo
+   ========================================================= */
+.sec-head { position: static; height: auto; }
+.sec-label {
+  position: static; writing-mode: horizontal-tb; transform: none;
+  display: inline-flex; margin: 12px 0 0; padding: 3px 12px 3px 10px;
+  font-size: 12px; letter-spacing: .03em; border-radius: 8px 8px 8px 0;
+}
+.sheet > .sec-head:first-of-type .sec-label { margin-top: 0; }
+.play .sec-label { margin-top: 4px; }
+.line { border-right: none; border-left: 4px solid transparent; }
+.line[data-s] { border-left-color: var(--sc); }
+.edit .line, .edit .line.sec-first { padding-right: 44px; }
+.play .line, .play .line.sec-first { padding-right: 8px; }
+.line-tools, .line.sec-first .line-tools { right: 4px; }
+.line.sec-short { min-height: auto; }
+@media (max-width: 860px) { .edit .line, .edit .line.sec-first { padding-right: 56px; } }
+
+/* jeden sloupec: text uprostřed, nenatahovat přes celou šířku */
+.play .sheet:not(.cols) { max-width: 46em; margin: 0 auto; }
+.play .sec-head { padding-bottom: 6px; }
