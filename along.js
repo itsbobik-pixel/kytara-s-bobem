@@ -474,10 +474,12 @@ function renderAlongSheet(sheet) {
       const total = song.lines.filter(l => l.section === sec).length;
       // klik na štítek části = přehrát od začátku té části
       const startL = AL.model.lines.slice(L.li).find(x => x.s != null);
-      sheet.append(h('div', { class: 'al-sec' }, h('button', {
+      const jump = () => { if (startL) alJump(startL.s); };
+      sheet.append(h('div', { class: 'al-sec' }, h('span', {
         class: 'sec-label al-sec-btn', 'data-s': sec, title: 'Přehrát od začátku této části',
-        onclick: () => { if (startL) alJump(startL.s); },
-      }, '▶ ' + secLabel(sec) + (sec === 'verse' && total > 1 ? ' ' + counts[sec] : ''))));
+        role: 'button', tabindex: 0, onclick: jump,
+        onkeydown: e => { if (e.key === 'Enter') jump(); },
+      }, secLabel(sec) + (sec === 'verse' && total > 1 ? ' ' + counts[sec] : ''))));
     }
     if (!line.text && !line.chords.length) { sheet.append(h('div', { class: 'gap' })); refs.lines[L.li] = null; return; }
     const el = h('div', { class: 'line al-line' + (line.chords.length ? ' has-chords' : '') + (!line.text ? ' instr' : ''), 'data-li': L.li, 'data-s': sec || null });
