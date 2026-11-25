@@ -530,6 +530,7 @@ function render() {
   if (route.view !== 'along' && typeof alongStop === 'function') alongStop();
   if (prevView !== route.view) window.scrollTo(0, 0);
   if (route.id !== historyFor || route.mode === 'edit') { viewShift = 0; viewCapo = 0; }   // transpozice ani kapo se nepřenáší
+  if (route.view === 'along') viewShift = 0;   // play-along je vždy v tónině nahrávky (kapo zůstává)
   if (route.id !== historyFor) { undoStack = []; redoStack = []; historyFor = route.id || null; selection = null; caret = null; expandedRefs = new Set(); }
   const loadingSong = '<div class="wrap"><div class="empty"><div class="big-emoji">🎸</div><h2>Načítám song…</h2></div></div>';
   if ((route.view === 'song' || route.view === 'along') && !current()) {
