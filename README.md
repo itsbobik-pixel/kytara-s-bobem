@@ -45,6 +45,12 @@ Pomocník poslouchá jen na tvém počítači (127.0.0.1) a odpovídá jen appce
 
 > Stahování zvuku z YouTube je v rozporu s jejich podmínkami užití. Používej to jen pro vlastní potřebu.
 
+## Play-along (zkušební)
+
+V režimu hraní je tlačítko **🎵 Play-along**: hraje hudba, text se přebarvuje podle zpěvu a akordy svítí ve chvíli, kdy hrají. Posuvník 🎤 ztlumí zpěv (karaoke). Tlačítkem **✎ Doladit** se otevře časová osa, kde jde tažením posunout slovo, akord nebo celý řádek.
+
+Časy vznikají skriptem [helper/align.py](helper/align.py) na grafické kartě (zkoušeno na RunPodu): Demucs oddělí vokál, WhisperX najde čas každého slova a skript ho přiřadí k textu písničky. Výsledek (`vocals.mp3`, `no_vocals.mp3`, `sync.json`) patří do `helper/tmp/stems/<id songu>/`, odkud ho appce posílá pomocník. Časy se pak uloží k songu, zvuk zůstává jen u tebe.
+
 ## Vývoj
 
 Čisté HTML, CSS a JavaScript bez buildu: `index.html`, `styles.css`, `app.js`, `keydetect.js`. Soubor `artifact.html` je verze pro claude.ai.

@@ -490,7 +490,8 @@ function updateHistoryButtons() {
 //  ROUTER
 // =========================================================
 function parseHash() {
-  const m = /^#(song|play)-([A-Za-z0-9]+)$/.exec(location.hash);
+  const m = /^#(song|play|along)-([A-Za-z0-9]+)$/.exec(location.hash);
+  if (m && m[1] === 'along') return { view: 'along', id: m[2], mode: 'play' };
   if (m) return { view: 'song', id: m[2], mode: m[1] === 'play' ? 'play' : 'edit' };
   return { view: 'list' };
 }
@@ -501,14 +502,18 @@ function render() {
   closePopover();
   stopAutoscroll();
   armed = null;
+  const prevView = route.view;
   route = parseHash();
+  if (route.view !== 'along' && typeof alongStop === 'function') alongStop();
+  if (prevView !== route.view) window.scrollTo(0, 0);
   if (route.id !== historyFor) { undoStack = []; redoStack = []; historyFor = route.id || null; selection = null; caret = null; expandedRefs = new Set(); }
-  if (route.view === 'song' && !current()) {
+  if ((route.view === 'song' || route.view === 'along') && !current()) {
     if (auth.loading) { $('#app').innerHTML = '<div class="wrap"><div class="empty"><div class="big-emoji">🎸</div><h2>Načítám song…</h2></div></div>'; return; }
     go('#'); return;
   }
   document.documentElement.style.setProperty('--fs', settings.fontSize + 'px');
-  if (route.view === 'song') renderEditor(); else renderLibrary();
+  if (route.view === 'along') renderAlong();
+  else if (route.view === 'song') renderEditor(); else renderLibrary();
 }
 
 // =========================================================
@@ -1047,6 +1052,7 @@ function renderEditor() {
         toast(song.isPublic ? 'Song je veřejný' : 'Song vidíš jen ty');
       },
     }, song.isPublic === false ? '🔒 Jen pro mě' : '🌍 Veřejný'),
+    play && h('a', { class: 'btn al-btn', href: '#along-' + song.id, title: 'Play-along: hudba, text se přebarvuje podle zpěvu a akordy svítí' }, '🎵 Play-along'),
     play
       ? (editable ? h('a', { class: 'btn primary', href: '#song-' + song.id }, '✎ Upravit') : null)
       : h('button', {
@@ -1838,6 +1844,12 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     const at = caret || { li: selRange().li, pos: selRange().from };
     pasteChords(at.li, at.pos);
+    return;
+  }
+  if (route.view === 'along' && !typing) {
+    if (e.key === ' ') { e.preventDefault(); alToggle(); }
+    else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); alUndo(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); alSeek(alNow() + (e.key === 'ArrowLeft' ? -5 : 5)); }
     return;
   }
   if ((e.ctrlKey || e.metaKey) && !typing && route.view === 'song' && (k === 'z' || k === 'y')) {

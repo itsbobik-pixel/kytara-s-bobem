@@ -33,6 +33,10 @@ MAX_SECONDS = 15 * 60                                  # delší videa nestahuje
 ALLOWED_ORIGINS = re.compile(
     r"^(null|https?://(localhost|127\.0\.0\.1)(:\d+)?|https://itsbobik-pixel\.github\.io)$"
 )
+# oddělené stopy a časy pro play-along: helper/tmp/stems/<id songu>/
+STEMS_DIR = ROOT / "helper" / "tmp" / "stems"
+STEM_FILES = ("vocals.mp3", "no_vocals.mp3", "sync.json")
+STEM_PATH = re.compile(r"^/stems/([A-Za-z0-9]{4,40})/(|vocals\.mp3|no_vocals\.mp3|sync\.json)$")
 YT_URL = re.compile(r"^https://(www\.|m\.|music\.)?(youtube\.com/(watch\?|shorts/|live/)|youtu\.be/)[\w\-?=&%./]+$", re.I)
 
 
@@ -98,10 +102,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _stems(self, path):
+        """/stems/<id>/ → co je k dispozici; /stems/<id>/<soubor> → soubor (vokál, doprovod, časy)"""
+        m = STEM_PATH.match(path)
+        if not m:
+            self._json(404, {"error": "Neznámý soubor."}); return
+        folder = STEMS_DIR / m.group(1)
+        name = m.group(2)
+        if not name:
+            self._json(200, {f: (folder / f).is_file() for f in STEM_FILES})
+            return
+        f = folder / name
+        if not f.is_file():
+            self._json(404, {"error": "Soubor tu není."}); return
+        data = f.read_bytes()
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", "application/json" if name.endswith(".json") else "audio/mpeg")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path in ("/health", "/audio") and not self._origin_ok():
+        if parsed.path.startswith(("/health", "/audio", "/stems")) and not self._origin_ok():
             self._json(403, {"error": "Tahle stránka nemá k pomocníkovi přístup."})
+            return
+        if parsed.path.startswith("/stems/"):
+            self._stems(parsed.path)
             return
         if parsed.path == "/health":
             self._json(200, {"ok": True, "app": "kytara-s-bobem", "yt_dlp": yt_dlp.version.__version__})

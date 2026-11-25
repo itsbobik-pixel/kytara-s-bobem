@@ -20,7 +20,7 @@ window.KSB_SUPA = (() => {
     title: (s.title || '').slice(0, 200),
     artist: (s.artist || '').slice(0, 200),
     is_public: s.isPublic !== false,
-    data: { key: s.key, baseKey: s.baseKey || null, capo: s.capo || 0, lines: s.lines, custom: s.custom || [] },
+    data: { key: s.key, baseKey: s.baseKey || null, capo: s.capo || 0, lines: s.lines, custom: s.custom || [], sync: s.sync || null },
   });
   const fromRow = r => ({
     id: r.id,
@@ -31,6 +31,7 @@ window.KSB_SUPA = (() => {
     baseKey: r.data?.baseKey || null,
     lines: Array.isArray(r.data?.lines) ? r.data.lines : [],
     custom: r.data?.custom || [],
+    sync: r.data?.sync || null,
     updated: Date.parse(r.updated_at) || 0,
     owner: r.owner,
     author: r.author_name || '',

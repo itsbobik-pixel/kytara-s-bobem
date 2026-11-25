@@ -1,0 +1,609 @@
+'use strict';
+/* =========================================================
+   Kytara s Bobem – Play-along
+   Přehrávání s textem, který se přebarvuje podle zpěvu, a akordy,
+   které se rozsvítí ve chvíli, kdy hrají. Režim „Doladit“ = časová osa,
+   kde se slova, řádky a akordy dají posunout tažením.
+
+   Časy jsou v song.sync:
+     { v: 1, dur, lines: [ { w: [[pos, len, start, end], …], c: [[pos, time], …] } ] }
+   Index řádku = index v song.lines. Vzniká v helper/align.py (Demucs + WhisperX).
+   Používá globální věci z app.js (h, $, settings, current, canEdit, touch, chordName…).
+   ========================================================= */
+
+const AL = {
+  id: null,          // song, pro který je načtený zvuk
+  sync: null,        // pracovní kopie časů
+  model: null,       // spočítané časy řádků, slov a akordů
+  ctx: null, bufs: {}, gains: {}, sources: [],
+  playing: false, t0: 0, offset: 0, dur: 0,
+  raf: 0, loading: false, error: '', hasStems: false,
+  edit: false, view0: 0, span: 12, undo: [], env: null,
+  refs: null,        // odkazy do DOM pro rychlé zvýrazňování
+};
+const r3 = x => Math.round(x * 1000) / 1000;
+
+// ---------- data ----------
+function syncFromAlign(out) {
+  return {
+    v: 1, dur: r3(out.duration || 0),
+    lines: (out.lines || []).map(l => ({
+      w: (l.words || []).map(w => [w.pos, w.len, r3(w.start), r3(w.end)]),
+      c: (l.chords || []).filter(c => c.time != null).map(c => [c.pos, r3(c.time)]),
+    })),
+  };
+}
+
+function buildModel(song, sync) {
+  const lines = song.lines.map((line, li) => {
+    const sl = sync.lines[li] || { w: [], c: [] };
+    // k = index v sl.w (podle něj editor posouvá)
+    const words = sl.w.map(([pos, len, s, e], k) => ({ k, pos, len, s, e: Math.max(e, s + 0.05) }))
+      .filter(w => w.pos < Math.max(1, line.text.length));
+    const tAt = pos => {
+      if (!words.length) return null;
+      if (pos <= words[0].pos) return words[0].s;
+      for (const w of words) {
+        if (pos >= w.pos && pos <= w.pos + w.len) return w.s + (w.e - w.s) * Math.min(1, (pos - w.pos) / Math.max(1, w.len));
+      }
+      const after = words.find(w => w.pos > pos);
+      return after ? after.s : words[words.length - 1].e;
+    };
+    const chords = line.chords.map(ch => {
+      const hit = sl.c.find(c => c[0] === ch.pos);
+      return { ch, pos: ch.pos, t: hit ? hit[1] : tAt(ch.pos), explicit: !!hit };
+    });
+    return { li, words, chords, s: words.length ? words[0].s : null, e: words.length ? words[words.length - 1].e : null };
+  });
+  // řádky jen s akordy (intro, mezihra): rozprostři mezi sousední zpívané řádky
+  lines.forEach((L, i) => {
+    if (L.s != null || !L.chords.length || L.chords.every(c => c.t != null)) return;
+    const prev = lines.slice(0, i).reverse().find(x => x.e != null);
+    const next = lines.slice(i + 1).find(x => x.s != null);
+    const a = prev ? prev.e : 0, b = next ? next.s : a + 4;
+    L.chords.forEach((c, k) => { if (c.t == null) c.t = a + (b - a) * (k + 0.5) / L.chords.length; });
+    L.s = L.chords[0].t; L.e = b;
+  });
+  const chords = lines.flatMap(L => L.chords.map(c => ({ ...c, li: L.li }))).filter(c => c.t != null).sort((x, y) => x.t - y.t);
+  return { lines, chords };
+}
+
+const alSong = () => current();
+function rebuild() { AL.model = buildModel(alSong(), AL.sync); }
+
+/** uloží změnu časů (jen kdo smí song upravit) */
+function commitSync() {
+  const song = alSong();
+  rebuild();
+  if (!canEdit(song)) return;
+  song.sync = clone(AL.sync);
+  touch(song);
+}
+function pushSyncUndo() {
+  AL.undo.push(JSON.stringify(AL.sync));
+  if (AL.undo.length > 100) AL.undo.shift();
+  const b = $('#alUndo'); if (b) b.disabled = false;
+}
+function alUndo() {
+  const s = AL.undo.pop();
+  if (!s) return;
+  AL.sync = JSON.parse(s);
+  commitSync();
+  renderAlongBody();
+}
+
+// ---------- zvuk (Web Audio: vokál a doprovod hrají spolu, vokál má vlastní hlasitost) ----------
+const alNow = () => AL.playing ? Math.min(AL.dur, AL.ctx.currentTime - AL.t0) : AL.offset;
+function alStopSources() {
+  for (const s of AL.sources) { try { s.onended = null; s.stop(); } catch { /* už stojí */ } }
+  AL.sources = [];
+}
+function alPlay() {
+  if (!AL.ctx || !Object.keys(AL.bufs).length) return;
+  if (AL.ctx.state === 'suspended') AL.ctx.resume();
+  alStopSources();
+  if (AL.offset >= AL.dur - 0.05) AL.offset = 0;
+  for (const [name, buf] of Object.entries(AL.bufs)) {
+    const src = AL.ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(AL.gains[name]);
+    src.start(0, AL.offset);
+    AL.sources.push(src);
+  }
+  AL.t0 = AL.ctx.currentTime - AL.offset;
+  AL.playing = true;
+  updatePlayBtn();
+}
+function alPause() {
+  if (!AL.playing) return;
+  AL.offset = alNow();
+  AL.playing = false;
+  alStopSources();
+  updatePlayBtn();
+}
+function alToggle() { if (AL.playing) alPause(); else alPlay(); }
+function alSeek(t) {
+  AL.offset = Math.max(0, Math.min(AL.dur, t));
+  if (AL.playing) alPlay();
+  AL.lastLine = -2;
+  alTick(true);
+}
+function setVocal(v) {
+  settings.vocal = v; saveSettings();
+  if (AL.gains.vocals) AL.gains.vocals.gain.value = v;
+}
+/** zastaví přehrávání, když uživatel odejde jinam */
+function alongStop() {
+  alPause();
+  cancelAnimationFrame(AL.raf);
+  AL.raf = 0;
+}
+
+async function alLoad(song) {
+  AL.id = song.id;
+  AL.sync = song.sync ? clone(song.sync) : null;
+  AL.bufs = {}; AL.gains = {}; AL.env = null; AL.offset = 0; AL.playing = false; AL.undo = [];
+  AL.error = ''; AL.hasStems = false; AL.loading = true; AL.view0 = 0;
+  renderAlongBody();
+  try {
+    const avail = await fetch(`${HELPER}/stems/${song.id}/`, { signal: AbortSignal.timeout(2500) }).then(r => r.ok ? r.json() : null);
+    if (avail?.['sync.json'] && !AL.sync) {
+      const out = await fetch(`${HELPER}/stems/${song.id}/sync.json`).then(r => r.json());
+      AL.sync = syncFromAlign(out);
+      if (canEdit(song)) { song.sync = clone(AL.sync); touch(song); }
+    }
+    if (avail?.['vocals.mp3'] && avail?.['no_vocals.mp3']) {
+      await alDecode({
+        vocals: `${HELPER}/stems/${song.id}/vocals.mp3`,
+        no_vocals: `${HELPER}/stems/${song.id}/no_vocals.mp3`,
+      });
+      AL.hasStems = true;
+    }
+  } catch { /* pomocník neběží – nabídneme výběr MP3 */ }
+  AL.loading = false;
+  if (AL.id !== song.id) return;
+  if (AL.sync) rebuild();
+  renderAlongBody();
+}
+
+async function alDecode(urls) {
+  AL.ctx = AL.ctx || new (window.AudioContext || window.webkitAudioContext)();
+  const entries = await Promise.all(Object.entries(urls).map(async ([name, src]) => {
+    const data = src instanceof ArrayBuffer ? src : await fetch(src).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
+    return [name, await AL.ctx.decodeAudioData(data)];
+  }));
+  for (const [name, buf] of entries) {
+    AL.bufs[name] = buf;
+    const g = AL.ctx.createGain();
+    g.gain.value = name === 'vocals' ? (settings.vocal ?? 1) : 1;
+    g.connect(AL.ctx.destination);
+    AL.gains[name] = g;
+  }
+  AL.dur = Math.max(...entries.map(([, b]) => b.duration));
+  const voc = AL.bufs.vocals || AL.bufs.mix;
+  AL.env = voc ? envelope(voc) : null;
+}
+
+/** hlasitost vokálu po 20 ms – pro časovou osu v editoru */
+function envelope(buf) {
+  const ch = buf.getChannelData(0), hop = Math.round(buf.sampleRate * 0.02);
+  const out = new Float32Array(Math.ceil(ch.length / hop));
+  let max = 1e-6;
+  for (let i = 0; i < out.length; i++) {
+    let s = 0;
+    const a = i * hop, b = Math.min(ch.length, a + hop);
+    for (let j = a; j < b; j += 4) s += ch[j] * ch[j];
+    out[i] = Math.sqrt(s / Math.max(1, (b - a) / 4));
+    if (out[i] > max) max = out[i];
+  }
+  for (let i = 0; i < out.length; i++) out[i] = Math.sqrt(out[i] / max);
+  return out;
+}
+
+function pickMp3() {
+  const inp = h('input', { type: 'file', accept: 'audio/*' });
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    AL.loading = true; renderAlongBody();
+    try {
+      AL.bufs = {}; AL.gains = {};
+      await alDecode({ mix: await f.arrayBuffer() });
+    } catch { toast('Tenhle soubor se nepodařilo přehrát.'); }
+    AL.loading = false; renderAlongBody();
+  };
+  inp.click();
+}
+
+// ---------- vykreslení ----------
+function renderAlong() {
+  const song = current();
+  if (!song) return;
+  document.body.classList.add('playing');
+  renderTopActions([h('a', { class: 'btn ghost', href: '#' }, '← Songy')]);
+  if (AL.id !== song.id) { alongStop(); alLoad(song); return; }
+  if (!AL.sync && song.sync) { AL.sync = clone(song.sync); rebuild(); }
+  renderAlongBody();
+}
+
+function renderAlongBody() {
+  const song = alSong();
+  const app = $('#app');
+  if (!song || !app) return;
+  const editable = canEdit(song);
+  if (!editable) AL.edit = false;
+  const ready = !!Object.keys(AL.bufs).length;
+  app.innerHTML = '';
+
+  const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const bar = h('div', { class: 'play-bar al-bar' },
+    h('a', { class: 'pb-back', href: '#play-' + song.id, title: 'Zpět na text' }, '←'),
+    h('div', { class: 'pb-name', title: (song.artist ? song.artist + ' – ' : '') + song.title },
+      song.artist ? h('span', { class: 'pb-artist' }, song.artist + ' – ') : null,
+      h('b', {}, song.title || 'Bez názvu')),
+    h('div', { class: 'controls' },
+      h('button', { id: 'alPlay', class: 'btn primary al-play', disabled: !ready || !AL.sync, onclick: alToggle, title: 'Přehrát / pauza (mezerník)' }, AL.playing ? '❚❚' : '▶'),
+      h('span', { id: 'alTime', class: 'al-time' }, fmt(alNow()) + ' / ' + fmt(AL.dur || AL.sync?.dur || 0)),
+      h('input', {
+        id: 'alSeek', class: 'al-seek', type: 'range', min: 0, max: Math.max(1, AL.dur), step: 0.1, value: alNow(),
+        disabled: !ready, 'aria-label': 'Posun v písničce',
+        oninput: e => alSeek(+e.target.value),
+      }),
+      AL.hasStems ? h('label', { class: 'al-voc', title: 'Hlasitost zpěvu – úplně vlevo = karaoke bez vokálu' },
+        h('span', {}, (settings.vocal ?? 1) < 0.05 ? '🎸' : '🎤'),
+        h('input', {
+          type: 'range', min: 0, max: 1, step: 0.05, value: settings.vocal ?? 1, 'aria-label': 'Hlasitost vokálu',
+          oninput: e => { setVocal(+e.target.value); e.target.previousSibling.textContent = +e.target.value < 0.05 ? '🎸' : '🎤'; },
+        })) : null,
+      editable && AL.sync ? h('button', {
+        class: 'tbtn' + (AL.edit ? ' on' : ''), title: 'Doladit časy tažením na časové ose',
+        onclick: () => { AL.edit = !AL.edit; AL.view0 = Math.max(0, alNow() - AL.span * 0.25); renderAlongBody(); },
+      }, '✎ Doladit') : null,
+      AL.edit ? h('button', { id: 'alUndo', class: 'tbtn', onclick: alUndo, disabled: !AL.undo.length, title: 'Vrátit poslední posun (Ctrl+Z)' }, '↶ Zpět') : null));
+
+  const ed = h('div', { class: 'editor play along' + (AL.edit ? ' al-editing' : '') }, bar);
+
+  if (AL.loading) {
+    ed.append(h('div', { class: 'empty' }, h('div', { class: 'big-emoji' }, '🎧'), h('h2', {}, 'Načítám zvuk…')));
+    app.append(ed);
+    return;
+  }
+  if (!AL.sync) {
+    ed.append(h('div', { class: 'empty al-empty' },
+      h('div', { class: 'big-emoji' }, '⏱'),
+      h('h2', {}, 'Tahle písnička ještě nemá časy'),
+      h('p', {}, 'Časy textu a akordů vzniknou z nahrávky (oddělení vokálu + rozpoznání zpěvu). Zatím se připravují přes pomocníka na počítači.')));
+    app.append(ed);
+    return;
+  }
+
+  ed.append(h('div', { class: 'al-now' },
+    h('div', { class: 'al-cur-wrap' }, h('small', {}, 'Hraje'), h('span', { id: 'alCur', class: 'chord al-cur' }, '–')),
+    h('div', { class: 'al-next-wrap' },
+      h('small', {}, 'Další'), h('span', { id: 'alNext', class: 'chord al-next' }, '–'),
+      h('div', { class: 'al-meter' }, h('i', { id: 'alMeter' }))),
+    !ready ? h('div', { class: 'al-src' },
+      h('span', {}, 'Bez zvuku. Spusť pomocníka (stopy s/bez vokálu), nebo '),
+      h('button', { class: 'btn', onclick: pickMp3 }, '🎵 vyber MP3')) : null));
+
+  const sheet = h('div', { class: 'sheet al-sheet', id: 'alSheet' });
+  ed.append(h('div', { class: 'sheet-wrap' }, sheet));
+  if (AL.edit) ed.append(renderTimelineShell());
+  app.append(ed);
+
+  renderAlongSheet(sheet);
+  if (AL.edit) renderTimeline();
+  AL.lastLine = -2;
+  alTick(true);
+  if (!AL.raf) AL.raf = requestAnimationFrame(alLoop);
+}
+
+function renderAlongSheet(sheet) {
+  const song = alSong();
+  const refs = { lines: [], chords: new Map() };
+  let sec = null;
+  const counts = {};
+  AL.model.lines.forEach(L => {
+    const line = song.lines[L.li];
+    if (line.section) {
+      sec = line.section;
+      counts[sec] = (counts[sec] || 0) + 1;
+      const total = song.lines.filter(l => l.section === sec).length;
+      sheet.append(h('div', { class: 'al-sec' }, h('span', { class: 'sec-label', 'data-s': sec }, secLabel(sec) + (sec === 'verse' && total > 1 ? ' ' + counts[sec] : ''))));
+    }
+    if (!line.text && !line.chords.length) { sheet.append(h('div', { class: 'gap' })); refs.lines[L.li] = null; return; }
+    const el = h('div', { class: 'line al-line' + (line.chords.length ? ' has-chords' : '') + (!line.text ? ' instr' : ''), 'data-li': L.li, 'data-s': sec || null });
+    const minPos = line.chords.reduce((m, c) => Math.min(m, c.pos), 0);
+    if (minPos < 0) el.style.setProperty('--pre', String(-minPos));
+    const len = Math.max(line.text.length, line.chords.reduce((m, c) => Math.max(m, c.pos + 1), 0), 1);
+    const chars = [];
+    const wordOf = new Map();
+    L.words.forEach(w => { for (let i = w.pos; i < w.pos + w.len; i++) wordOf.set(i, w); });
+    for (let i = minPos; i < len; i++) {
+      const ch = i >= 0 && i < line.text.length ? line.text[i] : null;
+      const span = h('span', { class: 'c' + (ch == null ? ' pad' : '') + (i < 0 ? ' pre' : ''), 'data-i': i }, ch == null ? ' ' : ch);
+      const w = wordOf.get(i);
+      if (w) { span.dataset.w = w.k; chars.push({ el: span, w, i }); }
+      const c = L.chords.find(x => x.pos === i);
+      if (c) {
+        const ce = h('span', { class: 'chord ' + degClass(c.ch.root, song.key) }, chordName(c.ch, song.key));
+        span.append(ce);
+        refs.chords.set(L.li + ':' + i, ce);
+      }
+      el.append(span);
+    }
+    // klik na slovo = skok na to místo
+    el.addEventListener('click', e => {
+      const c = e.target.closest('.c');
+      const w = c && L.words.find(x => x.k === +c.dataset.w);
+      const t = w ? w.s : L.s;
+      if (t != null) alSeek(t - 0.3);
+    });
+    sheet.append(el);
+    refs.lines[L.li] = { el, chars, L };
+  });
+  AL.refs = refs;
+}
+
+// ---------- zvýrazňování (každý snímek) ----------
+function alLoop() {
+  AL.raf = requestAnimationFrame(alLoop);
+  if (!$('#alSheet')) { cancelAnimationFrame(AL.raf); AL.raf = 0; return; }
+  if (AL.playing && alNow() >= AL.dur - 0.02) { alPause(); AL.offset = 0; }
+  alTick(false);
+}
+
+function alTick(force) {
+  if (!AL.model || !AL.refs) return;
+  const t = alNow();
+  const song = alSong();
+  // čas
+  const time = $('#alTime');
+  if (time) {
+    const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    time.textContent = fmt(t) + ' / ' + fmt(AL.dur || AL.sync?.dur || 0);
+  }
+  const seek = $('#alSeek');
+  if (seek && document.activeElement !== seek) seek.value = t;
+
+  // aktuální řádek = poslední, který už začal (s malým předstihem)
+  const lines = AL.model.lines;
+  let cur = -1;
+  for (const L of lines) if (L.s != null && L.s <= t + 0.25 && AL.refs.lines[L.li]) cur = L.li;
+  if (cur !== AL.lastLine || force) {
+    AL.refs.lines.forEach((r, li) => {
+      if (!r) return;
+      r.el.classList.toggle('past', li < cur);
+      r.el.classList.toggle('cur', li === cur);
+      if (li !== cur) r.chars.forEach(c => c.el.classList.remove('on'));
+    });
+    if (cur >= 0 && !AL.edit || (cur >= 0 && AL.playing)) {
+      const el = AL.refs.lines[cur].el;
+      const r = el.getBoundingClientRect();
+      const target = window.scrollY + r.top - innerHeight * 0.38;
+      if (Math.abs(r.top - innerHeight * 0.38) > 40) window.scrollTo({ top: target, behavior: force ? 'auto' : 'smooth' });
+    }
+    AL.lastLine = cur;
+  }
+  // přebarvení po písmenkách v aktuálním řádku
+  const r = cur >= 0 && AL.refs.lines[cur];
+  if (r) {
+    for (const c of r.chars) {
+      const w = c.w;
+      const k = c.i - w.pos;
+      c.el.classList.toggle('on', t >= w.s + (w.e - w.s) * (k / Math.max(1, w.len)));
+    }
+  }
+  // akordy
+  const ch = AL.model.chords;
+  let ci = -1;
+  for (let i = 0; i < ch.length; i++) { if (ch[i].t <= t + 0.05) ci = i; else break; }
+  if (ci !== AL.lastChord || force) {
+    if (AL.nowChordEl) AL.nowChordEl.classList.remove('now');
+    const c = ci >= 0 ? ch[ci] : null;
+    AL.nowChordEl = c ? AL.refs.chords.get(c.li + ':' + c.pos) : null;
+    if (AL.nowChordEl) AL.nowChordEl.classList.add('now');
+    const setBig = (el, c) => {
+      if (!el) return;
+      el.textContent = c ? chordName(c.ch, song.key) : '–';
+      el.className = el.id === 'alCur' ? 'chord al-cur' : 'chord al-next';
+      if (c) el.classList.add(degClass(c.ch.root, song.key));
+    };
+    setBig($('#alCur'), c);
+    setBig($('#alNext'), ch[ci + 1]);
+    AL.lastChord = ci;
+  }
+  const meter = $('#alMeter');
+  if (meter) {
+    const a = ci >= 0 ? ch[ci].t : 0, b = ch[ci + 1]?.t;
+    meter.style.width = b ? Math.min(100, Math.max(0, (t - a) / Math.max(0.1, b - a) * 100)) + '%' : '0%';
+  }
+  if (AL.edit) tlPlayhead(t);
+}
+
+// ---------- časová osa (Doladit) ----------
+const TL = { lanes: { line: [4, 26], word: [34, 30], chord: [70, 26] }, wave: [100, 56] };
+
+function renderTimelineShell() {
+  return h('div', { class: 'al-tl', id: 'alTl' },
+    h('div', { class: 'tl-tools' },
+      h('span', { class: 'tl-hint' }, 'Táhni slovo, akord nebo celý řádek. Klik do prázdna = skok.'),
+      h('button', { class: 'tbtn', title: 'Oddálit', onclick: () => tlZoom(1.5) }, '−'),
+      h('button', { class: 'tbtn', title: 'Přiblížit', onclick: () => tlZoom(1 / 1.5) }, '+')),
+    h('div', { class: 'tl-area', id: 'tlArea' },
+      h('canvas', { id: 'tlWave' }),
+      h('div', { class: 'tl-lab', style: `top:${TL.lanes.line[0]}px` }, 'Řádky'),
+      h('div', { class: 'tl-lab', style: `top:${TL.lanes.word[0]}px` }, 'Slova'),
+      h('div', { class: 'tl-lab', style: `top:${TL.lanes.chord[0]}px` }, 'Akordy'),
+      h('div', { class: 'tl-items', id: 'tlItems' }),
+      h('div', { class: 'tl-head', id: 'tlHead' })));
+}
+function tlZoom(f) {
+  const mid = AL.view0 + AL.span / 2;
+  AL.span = Math.max(3, Math.min(60, AL.span * f));
+  AL.view0 = Math.max(0, mid - AL.span / 2);
+  renderTimeline();
+}
+const tlWidth = () => $('#tlArea')?.clientWidth || 800;
+const tlX = t => (t - AL.view0) / AL.span * tlWidth();
+
+function renderTimeline() {
+  const area = $('#tlArea'), items = $('#tlItems'), cv = $('#tlWave');
+  if (!area || !items || !cv) return;
+  const song = alSong();
+  const W = area.clientWidth, H = area.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const g = cv.getContext('2d');
+  g.scale(dpr, dpr);
+  g.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  // mřížka po sekundách
+  g.fillStyle = css.getPropertyValue('--line') || '#ddd';
+  g.font = '11px Outfit, sans-serif';
+  for (let s = Math.ceil(AL.view0); s < AL.view0 + AL.span; s++) {
+    const x = tlX(s);
+    g.fillRect(x, 0, 1, H);
+    if (s % (AL.span > 20 ? 5 : 1) === 0) {
+      g.fillStyle = css.getPropertyValue('--muted') || '#888';
+      g.fillText(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, x + 3, H - 4);
+      g.fillStyle = css.getPropertyValue('--line') || '#ddd';
+    }
+  }
+  // vlna vokálu
+  if (AL.env) {
+    const [top, hgt] = TL.wave;
+    const mid = top + hgt / 2;
+    g.fillStyle = css.getPropertyValue('--d5') || '#a6f';
+    g.globalAlpha = 0.55;
+    for (let x = 0; x < W; x++) {
+      const t = AL.view0 + x / W * AL.span;
+      const v = AL.env[Math.floor(t / 0.02)] || 0;
+      g.fillRect(x, mid - v * hgt / 2, 1, Math.max(1, v * hgt));
+    }
+    g.globalAlpha = 1;
+  }
+
+  items.innerHTML = '';
+  const t0 = AL.view0 - 1, t1 = AL.view0 + AL.span + 1;
+  for (const L of AL.model.lines) {
+    const line = song.lines[L.li];
+    if (L.s != null && L.e != null && L.e >= t0 && L.s <= t1 && L.words.length) {
+      items.append(tlItem('line', L, null, tlX(L.s), Math.max(8, tlX(L.e) - tlX(L.s)), line.text.slice(0, 60)));
+    }
+    for (const w of L.words) {
+      if (w.e < t0 || w.s > t1) continue;
+      items.append(tlItem('word', L, w, tlX(w.s), Math.max(6, tlX(w.e) - tlX(w.s)), line.text.substr(w.pos, w.len)));
+    }
+    for (const c of L.chords) {
+      if (c.t == null || c.t < t0 || c.t > t1) continue;
+      const el = tlItem('chord', L, c, tlX(c.t), 0, chordName(c.ch, song.key));
+      el.classList.add(degClass(c.ch.root, song.key));
+      items.append(el);
+    }
+  }
+  // klik do prázdna = skok, kolečko = posun
+  area.onpointerdown = e => {
+    if (e.target.closest('.tl-it')) return;
+    const r = area.getBoundingClientRect();
+    alSeek(AL.view0 + (e.clientX - r.left) / W * AL.span);
+  };
+  area.onwheel = e => {
+    e.preventDefault();
+    const d = (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) / W * AL.span;
+    AL.view0 = Math.max(0, AL.view0 + d);
+    renderTimeline();
+  };
+  tlPlayhead(alNow());
+}
+
+function tlItem(kind, L, obj, x, w, label) {
+  const [top, hgt] = TL.lanes[kind];
+  const el = h('div', { class: 'tl-it tl-' + kind, style: `left:${x}px;top:${top}px;height:${hgt}px;` + (kind === 'chord' ? '' : `width:${w}px`), title: label }, label);
+  el._L = L;
+  el.addEventListener('pointerdown', e => tlDrag(e, el, kind, L, obj));
+  return el;
+}
+
+/** tažení položky na časové ose */
+function tlDrag(e, el, kind, L, obj) {
+  e.preventDefault();
+  e.stopPropagation();
+  const x0 = e.clientX;
+  const pps = tlWidth() / AL.span;
+  let moved = false;
+  // co se posouvá spolu: u řádku i jeho slova a akordy (náhled)
+  const group = kind === 'line'
+    ? [...$('#tlItems').children].filter(it => it._L === L)
+    : [el];
+  group.forEach(it => { it._left0 = parseFloat(it.style.left); });
+  el.setPointerCapture(e.pointerId);
+  el.classList.add('dragging');
+  const move = ev => {
+    const dx = ev.clientX - x0;
+    if (!moved && Math.abs(dx) < 3) return;
+    moved = true;
+    group.forEach(it => { it.style.left = (it._left0 + dx) + 'px'; });
+    el.dataset.d = (dx / pps >= 0 ? '+' : '−') + Math.abs(dx / pps).toFixed(2) + ' s';
+  };
+  const up = ev => {
+    el.removeEventListener('pointermove', move);
+    el.removeEventListener('pointerup', up);
+    el.removeEventListener('pointercancel', up);
+    el.classList.remove('dragging');
+    if (!moved) {   // klik = přehraj od tohoto místa
+      const t = kind === 'chord' ? obj.t : kind === 'word' ? obj.s : L.s;
+      alSeek(t - 0.3);
+      if (!AL.playing) alPlay();
+      return;
+    }
+    const d = (ev.clientX - x0) / pps;
+    pushSyncUndo();
+    shiftSync(kind, L, obj, d);
+    commitSync();
+    renderAlongBody();
+  };
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+}
+
+/** posun v datech: slovo (i s akordy nad ním), akord, nebo celý řádek */
+function shiftSync(kind, L, obj, d) {
+  const sl = AL.sync.lines[L.li] || (AL.sync.lines[L.li] = { w: [], c: [] });
+  // akordy, které ještě nemají vlastní čas, si ho teď uloží (ať se nehýbou s jinými slovy)
+  for (const c of L.chords) if (c.t != null && !sl.c.some(x => x[0] === c.pos)) sl.c.push([c.pos, r3(c.t)]);
+  if (kind === 'chord') {
+    const e = sl.c.find(x => x[0] === obj.pos);
+    if (e) e[1] = r3(Math.max(0, e[1] + d));
+  } else if (kind === 'word') {
+    const w = sl.w[obj.k];
+    if (!w) return;
+    const len = w[3] - w[2];
+    w[2] = r3(Math.max(0, w[2] + d)); w[3] = r3(w[2] + len);
+    for (const c of sl.c) if (c[0] >= w[0] && c[0] < w[0] + Math.max(1, w[1])) c[1] = r3(Math.max(0, c[1] + d));
+  } else {
+    for (const w of sl.w) { const len = w[3] - w[2]; w[2] = r3(Math.max(0, w[2] + d)); w[3] = r3(w[2] + len); }
+    for (const c of sl.c) c[1] = r3(Math.max(0, c[1] + d));
+  }
+}
+
+function tlPlayhead(t) {
+  const head = $('#tlHead');
+  if (!head) return;
+  // při přehrávání drž playhead v záběru
+  if (AL.playing && (t > AL.view0 + AL.span * 0.85 || t < AL.view0)) {
+    AL.view0 = Math.max(0, t - AL.span * 0.2);
+    renderTimeline();
+    return;
+  }
+  head.style.left = tlX(t) + 'px';
+}
+
+function updatePlayBtn() {
+  const b = $('#alPlay');
+  if (b) b.textContent = AL.playing ? '❚❚' : '▶';
+}
+
+window.addEventListener('resize', () => { if (AL.edit && $('#tlArea')) renderTimeline(); });
