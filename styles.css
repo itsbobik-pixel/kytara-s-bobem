@@ -619,3 +619,9 @@ body.playing .topbar { display: none; }
 /* jeden sloupec: text uprostřed, nenatahovat přes celou šířku */
 .play .sheet:not(.cols) { max-width: 46em; margin: 0 auto; }
 .play .sec-head { padding-bottom: 6px; }
+
+/* štítky částí nahoře vpravo, pruh vpravo */
+.sec-head { display: flex; justify-content: flex-end; }
+.sec-label { border-radius: 8px 8px 0 8px; }
+.line { border-left: none; border-right: 4px solid transparent; }
+.line[data-s] { border-right-color: var(--sc); }
