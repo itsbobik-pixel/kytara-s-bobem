@@ -658,7 +658,7 @@ function renderLibrary() {
               catch { toast('Schválení se nepovedlo, zkus to znovu.'); }
             },
           }, '✓ Schválit') : null,
-          s.hasSync !== false ? h('a', { class: 'sl-ico sl-along', href: '#along-' + s.id, title: 'Play-along (hudba + text)', 'aria-label': 'Play-along' }, ico('guitar')) : null,
+          s.hasSync !== false ? h('a', { class: 'sl-along-pill', href: '#along-' + s.id, title: 'Play-along – hudba, text a akordy v rytmu' }, ico('guitar'), 'Play-along') : null,
           h('a', { class: 'sl-ico sl-chords', href: '#play-' + s.id, title: 'Jen akordy', 'aria-label': 'Jen akordy' }, ico('chords')))));
     });
   }

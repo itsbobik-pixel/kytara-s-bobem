@@ -816,3 +816,11 @@ body.al-editing .al-yt { bottom: 236px; }
 .capo-opt b { font-size: 15px; }
 .capo-opt span { font-size: 14px; }
 .capo-opt small { grid-column: 2; color: var(--muted); font-size: 12px; }
+.sl-along-pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px 0 11px; border-radius: 999px;
+  text-decoration: none; font-weight: 700; font-size: 14px; color: #fff; white-space: nowrap;
+  background: linear-gradient(90deg, var(--d0), var(--d5), var(--d4)); box-shadow: 0 2px 8px color-mix(in srgb, var(--d5) 35%, transparent);
+  transition: transform .12s ease, filter .12s ease;
+}
+.sl-along-pill:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.sl-along-pill .ico svg { width: 19px; height: 19px; }
