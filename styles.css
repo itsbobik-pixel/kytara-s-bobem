@@ -251,8 +251,9 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .chip.sec { --chip-bg: var(--sc); --chip-ink: #fff; }
 
 /* ---------- editor ---------- */
-.editor { max-width: 1200px; margin: 0 auto; padding: 22px 16px 120px; display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 28px; align-items: start; }
+.editor { max-width: 1200px; margin: 0 auto; padding: 22px 16px 120px; display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 28px; align-items: start; }
 .editor.play { grid-template-columns: minmax(0, 1fr); max-width: 980px; }
+/* text vlevo, paleta vpravo */ .editor.edit > .sheet-wrap { grid-column: 1; grid-row: 2; } .editor.edit > .palette { grid-column: 2; grid-row: 2; }
 .song-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
 .song-head .titles { min-width: 0; flex: 1 1 320px; }
 .title-input, .artist-input {
@@ -442,6 +443,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
   .editor { grid-template-columns: minmax(0, 1fr); padding-bottom: 46vh; }
+  .editor.edit > .sheet-wrap, .editor.edit > .palette { grid-column: 1; grid-row: auto; }
   .palette {
     position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 40; border-radius: 20px 20px 0 0;
     max-height: 40vh; padding: 14px 16px; border-bottom: none;
@@ -471,3 +473,11 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .key-btn .rel { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-top: 1px; }
 .key-btn.on .rel { color: inherit; opacity: .75; }
 .res-name small { font-weight: 600; color: var(--muted); font-size: 14px; }
+
+/* vložit řádek na začátek */
+.add-top {
+  display: block; width: 100%; margin: 0 0 14px; padding: 7px 12px; cursor: pointer;
+  border: 1.5px dashed var(--line); border-radius: 10px; background: transparent;
+  color: var(--muted); font-weight: 600; font-size: 13px; text-align: left;
+}
+.add-top:hover { color: var(--ink); border-color: var(--s-intro); background: color-mix(in srgb, var(--s-intro) 10%, transparent); }

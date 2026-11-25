@@ -493,9 +493,9 @@ function render() {
 function renderTopActions(extra = []) {
   const box = $('#topActions');
   box.innerHTML = '';
-  box.append(
+  box.append(...[
     h('span', { id: 'syncStatus', class: 'sync' }, statusText),
-    ...extra.filter(Boolean),
+    ...extra,
     auth.mode === 'supabase' && (auth.user
       ? h('button', {
           class: 'btn ghost user-btn', title: 'Klikni pro odhlášení',
@@ -506,7 +506,7 @@ function renderTopActions(extra = []) {
       class: 'btn ghost', title: 'Přepnout značení (česky H / anglicky B)',
       onclick: () => { settings.notation = settings.notation === 'cz' ? 'intl' : 'cz'; saveSettings(); render(); },
     }, 'Značení: ', h('b', {}, settings.notation === 'cz' ? 'H' : 'B')),
-  );
+  ].filter(Boolean));
 }
 
 // =========================================================
@@ -1084,6 +1084,12 @@ function renderSheet() {
 
   if (!song.lines.length) {
     sheet.append(h('p', { style: 'color:var(--muted)' }, 'Song je prázdný. Klikni na „✎ Text“ a vlož ho.'));
+  }
+  if (!play) {
+    sheet.append(h('button', {
+      class: 'add-top', title: 'Vloží prázdný řádek na úplný začátek – pak na něj přetáhni Intro a akordy',
+      onclick: () => { insertLine(0); toast('Řádek přidán nahoru – přetáhni na něj Intro a akordy'); },
+    }, '+ řádek na začátek (třeba intro)'));
   }
 
   song.lines.forEach((line, li) => {
