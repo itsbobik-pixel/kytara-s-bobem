@@ -770,3 +770,5 @@ body.al-editing .al-yt { bottom: 236px; }
 @media (max-width: 640px) {
   .al-yt { right: 8px; left: 8px; width: auto; height: 200px; bottom: 8px; }
 }
+.al-ad { color: var(--d1-ink); background: color-mix(in srgb, var(--d1) 35%, transparent); padding: 6px 12px; border-radius: 999px; font-weight: 600; }
+.al-ad[hidden] { display: none; }

@@ -187,7 +187,10 @@ async function ytStart(id) {
       onReady: () => {
         if (AL.ytId !== id) return;
         AL.ytReady = true;
-        AL.dur = AL.yt.getDuration() || AL.sync?.dur || 0;
+        // délka písničky: z časů (stejné video), jinak z YouTube – pokud zrovna nehraje reklama
+        const d = AL.yt.getDuration() || 0;
+        AL.ytDur = AL.sync?.dur && Math.abs(d - AL.sync.dur) > 3 ? AL.sync.dur : (d || AL.sync?.dur || 0);
+        AL.dur = AL.ytDur;
         if (AL.offset) AL.yt.seekTo(AL.offset, true);
         if (route.view === 'along') renderAlongBody();
       },
@@ -207,8 +210,16 @@ async function ytStart(id) {
   });
 }
 /** čas z YouTube chodí po skocích → mezi nimi dopočítáme podle hodin */
+/** běží reklama? YouTube během ní hlásí délku a čas reklamy místo písničky */
+function ytIsAd() {
+  const d = AL.yt.getDuration?.() || 0;
+  const ref = AL.ytDur || AL.sync?.dur || 0;
+  return d > 0 && ref > 0 && Math.abs(d - ref) > 3;
+}
 function ytNow() {
   if (!AL.ytReady || !AL.yt?.getCurrentTime) return AL.offset;
+  if (ytIsAd()) { AL.ytAd = true; AL.ytRaw = null; return AL.offset; }   // text čeká, kde byl
+  AL.ytAd = false;
   const raw = AL.yt.getCurrentTime() || 0;
   const p = performance.now();
   if (raw !== AL.ytRaw) { AL.ytRaw = raw; AL.ytAt = p; }
@@ -401,6 +412,7 @@ function renderAlongBody() {
     h('div', { class: 'al-next-wrap' },
       h('small', {}, 'Další'), h('span', { id: 'alNext', class: 'chord al-next' }, '–'),
       h('div', { class: 'al-meter' }, h('i', { id: 'alMeter' }))),
+    h('div', { id: 'alAd', class: 'al-src al-ad', hidden: true }, '📺 Reklama na YouTube – text počká, až začne písnička'),
     AL.error ? h('div', { class: 'al-src al-err' }, AL.error) : null,
     !ready && AL.engine === 'yt' && !AL.error ? h('div', { class: 'al-src' }, 'Načítám YouTube…') : null,
     !ready && AL.engine !== 'yt' ? h('div', { class: 'al-src' },
@@ -478,6 +490,8 @@ function alTick(force) {
   if (!AL.model || !AL.refs) return;
   const t = alNow();
   const song = alSong();
+  const ad = $('#alAd');
+  if (ad) ad.hidden = !(AL.engine === 'yt' && AL.ytAd);
   // čas
   const time = $('#alTime');
   if (time) {
