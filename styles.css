@@ -752,3 +752,21 @@ body.playing .topbar { display: none; }
   .al-now .chord { font-size: 24px; }
   .al-seek { width: 100%; order: 9; }
 }
+
+/* YouTube přehrávač pro play-along (YouTube vyžaduje viditelný přehrávač aspoň 200×200) */
+.al-yt {
+  position: fixed; right: 14px; bottom: 14px; z-index: 40; width: 356px; height: 200px;
+  border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.25); background: #000;
+}
+.al-yt[hidden] { display: none; }
+.al-yt iframe { width: 100%; height: 100%; display: block; }
+body.al-editing .al-yt { bottom: 236px; }
+.along .sheet-wrap { padding-bottom: max(45vh, 240px); }
+.al-err { color: var(--d0); font-weight: 600; }
+.al-ytpop { display: grid; gap: 8px; width: min(300px, calc(100vw - 52px)); }
+.al-ytpop input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; font: inherit; font-size: 14px; background: var(--surface); color: var(--ink); }
+.al-ytpop .modal-actions { margin-top: 2px; }
+.al-ytpop .hint { margin: 0; padding: 0; background: none; }
+@media (max-width: 640px) {
+  .al-yt { right: 8px; left: 8px; width: auto; height: 200px; bottom: 8px; }
+}

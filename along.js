@@ -20,6 +20,8 @@ const AL = {
   raf: 0, loading: false, error: '', hasStems: false,
   edit: false, view0: 0, span: 12, undo: [], env: null,
   refs: null,        // odkazy do DOM pro rychlé zvýrazňování
+  engine: null,      // 'wa' = stopy přes Web Audio (pomocník / MP3), 'yt' = vložené YouTube video
+  yt: null, ytId: null, ytReady: false, ytState: -1, ytRaw: null, ytAt: 0,
 };
 const r3 = x => Math.round(x * 1000) / 1000;
 
@@ -93,12 +95,17 @@ function alUndo() {
 }
 
 // ---------- zvuk (Web Audio: vokál a doprovod hrají spolu, vokál má vlastní hlasitost) ----------
-const alNow = () => AL.playing ? Math.min(AL.dur, AL.ctx.currentTime - AL.t0) : AL.offset;
+function alNow() {
+  if (AL.engine === 'yt') return ytNow();
+  return AL.playing ? Math.min(AL.dur, AL.ctx.currentTime - AL.t0) : AL.offset;
+}
+const alReady = () => AL.engine === 'yt' ? AL.ytReady : !!Object.keys(AL.bufs).length;
 function alStopSources() {
   for (const s of AL.sources) { try { s.onended = null; s.stop(); } catch { /* už stojí */ } }
   AL.sources = [];
 }
 function alPlay() {
+  if (AL.engine === 'yt') { if (AL.ytReady) AL.yt.playVideo(); return; }
   if (!AL.ctx || !Object.keys(AL.bufs).length) return;
   if (AL.ctx.state === 'suspended') AL.ctx.resume();
   alStopSources();
@@ -115,6 +122,7 @@ function alPlay() {
   updatePlayBtn();
 }
 function alPause() {
+  if (AL.engine === 'yt') { if (AL.ytReady) AL.yt.pauseVideo(); return; }
   if (!AL.playing) return;
   AL.offset = alNow();
   AL.playing = false;
@@ -124,7 +132,9 @@ function alPause() {
 function alToggle() { if (AL.playing) alPause(); else alPlay(); }
 function alSeek(t) {
   AL.offset = Math.max(0, Math.min(AL.dur, t));
-  if (AL.playing) alPlay();
+  if (AL.engine === 'yt') {
+    if (AL.ytReady) { AL.yt.seekTo(AL.offset, true); AL.ytRaw = null; }
+  } else if (AL.playing) alPlay();
   AL.lastLine = -2;
   alTick(true);
 }
@@ -137,13 +147,108 @@ function alongStop() {
   alPause();
   cancelAnimationFrame(AL.raf);
   AL.raf = 0;
+  const box = $('#alYtBox');
+  if (box) box.hidden = true;
+  document.body.classList.remove('al-editing');
+}
+
+// ---------- YouTube (vložený přehrávač – hraje se zpěvem a funguje všem) ----------
+let ytApi = null;
+function loadYtApi() {
+  if (ytApi) return ytApi;
+  ytApi = new Promise((res, rej) => {
+    if (window.YT?.Player) { res(); return; }
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { prev?.(); res(); };
+    const s = h('script', { src: 'https://www.youtube.com/iframe_api' });
+    s.onerror = () => { ytApi = null; rej(new Error('yt')); };
+    document.head.append(s);
+  });
+  return ytApi;
+}
+const YT_ID = /(?:[?&]v=|youtu\.be\/|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/;
+const ytIdFrom = s => { s = (s || '').trim(); if (/^[\w-]{11}$/.test(s)) return s; return YT_ID.exec(s)?.[1] || null; };
+
+async function ytStart(id) {
+  AL.engine = 'yt';
+  try { await loadYtApi(); } catch { AL.error = 'YouTube se nepodařilo načíst.'; renderAlongBody(); return; }
+  let box = $('#alYtBox');
+  if (!box) { box = h('div', { id: 'alYtBox', class: 'al-yt' }); document.body.append(box); }
+  box.hidden = false;
+  if (AL.yt && AL.ytId === id) return;
+  if (AL.yt) { try { AL.yt.destroy(); } catch { /* nic */ } }
+  box.innerHTML = '';
+  box.append(h('div', { id: 'alYtPlayer' }));
+  AL.ytId = id; AL.ytReady = false; AL.ytState = -1; AL.ytRaw = null;
+  AL.yt = new YT.Player('alYtPlayer', {
+    videoId: id, width: 356, height: 200,
+    playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+    events: {
+      onReady: () => {
+        if (AL.ytId !== id) return;
+        AL.ytReady = true;
+        AL.dur = AL.yt.getDuration() || AL.sync?.dur || 0;
+        if (AL.offset) AL.yt.seekTo(AL.offset, true);
+        if (route.view === 'along') renderAlongBody();
+      },
+      onStateChange: e => {
+        AL.ytState = e.data;
+        AL.playing = e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING;
+        if (e.data === YT.PlayerState.ENDED) AL.playing = false;
+        AL.ytRaw = null;
+        updatePlayBtn();
+      },
+      onError: () => {
+        AL.error = 'Tohle video nejde přehrát mimo YouTube (autor vložení zakázal). Zkus jiné video stejné nahrávky.';
+        if (route.view === 'along') renderAlongBody();
+      },
+    },
+  });
+}
+/** čas z YouTube chodí po skocích → mezi nimi dopočítáme podle hodin */
+function ytNow() {
+  if (!AL.ytReady || !AL.yt?.getCurrentTime) return AL.offset;
+  const raw = AL.yt.getCurrentTime() || 0;
+  const p = performance.now();
+  if (raw !== AL.ytRaw) { AL.ytRaw = raw; AL.ytAt = p; }
+  AL.offset = raw;
+  if (AL.ytState !== 1) return raw;
+  return raw + Math.min(0.5, (p - AL.ytAt) / 1000);
+}
+
+/** editor: vložit / změnit odkaz na YouTube video, ze kterého časy vznikly */
+function openYtPopover(anchor) {
+  const input = h('input', { type: 'url', placeholder: 'https://www.youtube.com/watch?v=…', value: AL.sync?.yt ? 'https://youtu.be/' + AL.sync.yt : '' });
+  const err = h('p', { class: 'form-err' });
+  const save = () => {
+    const id = ytIdFrom(input.value);
+    if (!id) { err.textContent = 'Tohle nevypadá jako odkaz na YouTube video.'; return; }
+    pushSyncUndo();
+    AL.sync.yt = id;
+    commitSync();
+    closePopover();
+    AL.error = '';
+    if (!AL.hasStems) ytStart(id);
+    renderAlongBody();
+    toast('YouTube video uloženo k songu ✓');
+  };
+  input.onkeydown = e => { if (e.key === 'Enter') save(); };
+  openPopover(anchor, h('div', { class: 'al-ytpop' },
+    h('b', {}, 'YouTube video'),
+    h('p', { class: 'hint' }, 'Stejná nahrávka, ze které vznikly časy. Pak to půjde přehrát všem, i bez pomocníka.'),
+    input, err,
+    h('div', { class: 'modal-actions' },
+      AL.sync?.yt ? h('button', { class: 'btn ghost', onclick: () => { pushSyncUndo(); delete AL.sync.yt; commitSync(); closePopover(); renderAlongBody(); } }, 'Odebrat') : h('span'),
+      h('button', { class: 'btn primary', onclick: save }, 'Uložit'))));
+  setTimeout(() => input.focus(), 30);
 }
 
 async function alLoad(song) {
   AL.id = song.id;
   AL.sync = song.sync ? clone(song.sync) : null;
   AL.bufs = {}; AL.gains = {}; AL.env = null; AL.offset = 0; AL.playing = false; AL.undo = [];
-  AL.error = ''; AL.hasStems = false; AL.loading = true; AL.view0 = 0;
+  AL.error = ''; AL.hasStems = false; AL.loading = true; AL.view0 = 0; AL.engine = null;
+  if (AL.yt) { try { AL.yt.pauseVideo(); } catch { /* nic */ } }
   renderAlongBody();
   try {
     const avail = await fetch(`${HELPER}/stems/${song.id}/`, { signal: AbortSignal.timeout(2500) }).then(r => r.ok ? r.json() : null);
@@ -158,11 +263,13 @@ async function alLoad(song) {
         no_vocals: `${HELPER}/stems/${song.id}/no_vocals.mp3`,
       });
       AL.hasStems = true;
+      AL.engine = 'wa';
     }
-  } catch { /* pomocník neběží – nabídneme výběr MP3 */ }
+  } catch { /* pomocník neběží – pustíme YouTube, nebo nabídneme výběr MP3 */ }
   AL.loading = false;
   if (AL.id !== song.id) return;
   if (AL.sync) rebuild();
+  if (!AL.hasStems && AL.sync?.yt) ytStart(AL.sync.yt);
   renderAlongBody();
 }
 
@@ -207,7 +314,8 @@ function pickMp3() {
     if (!f) return;
     AL.loading = true; renderAlongBody();
     try {
-      AL.bufs = {}; AL.gains = {};
+      if (AL.engine === 'yt') { alPause(); const box = $('#alYtBox'); if (box) box.hidden = true; }
+      AL.bufs = {}; AL.gains = {}; AL.engine = 'wa'; AL.playing = false; AL.offset = 0;
       await alDecode({ mix: await f.arrayBuffer() });
     } catch { toast('Tenhle soubor se nepodařilo přehrát.'); }
     AL.loading = false; renderAlongBody();
@@ -223,6 +331,7 @@ function renderAlong() {
   renderTopActions([h('a', { class: 'btn ghost', href: '#' }, '← Songy')]);
   if (AL.id !== song.id) { alongStop(); alLoad(song); return; }
   if (!AL.sync && song.sync) { AL.sync = clone(song.sync); rebuild(); }
+  if (AL.engine === 'yt') { const box = $('#alYtBox'); if (box) box.hidden = false; }
   renderAlongBody();
 }
 
@@ -232,7 +341,8 @@ function renderAlongBody() {
   if (!song || !app) return;
   const editable = canEdit(song);
   if (!editable) AL.edit = false;
-  const ready = !!Object.keys(AL.bufs).length;
+  const ready = alReady();
+  document.body.classList.toggle('al-editing', AL.edit);
   app.innerHTML = '';
 
   const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -255,6 +365,10 @@ function renderAlongBody() {
           type: 'range', min: 0, max: 1, step: 0.05, value: settings.vocal ?? 1, 'aria-label': 'Hlasitost vokálu',
           oninput: e => { setVocal(+e.target.value); e.target.previousSibling.textContent = +e.target.value < 0.05 ? '🎸' : '🎤'; },
         })) : null,
+      editable && AL.sync ? h('button', {
+        class: 'tbtn' + (AL.sync.yt ? ' on' : ''), title: AL.sync.yt ? 'YouTube video k songu – klik pro změnu' : 'Přidat YouTube video, ať play-along funguje všem',
+        onclick: e => openYtPopover(e.currentTarget),
+      }, '▶ YouTube') : null,
       editable && AL.sync ? h('button', {
         class: 'tbtn' + (AL.edit ? ' on' : ''), title: 'Doladit časy tažením na časové ose',
         onclick: () => { AL.edit = !AL.edit; AL.view0 = Math.max(0, alNow() - AL.span * 0.25); renderAlongBody(); },
@@ -282,8 +396,10 @@ function renderAlongBody() {
     h('div', { class: 'al-next-wrap' },
       h('small', {}, 'Další'), h('span', { id: 'alNext', class: 'chord al-next' }, '–'),
       h('div', { class: 'al-meter' }, h('i', { id: 'alMeter' }))),
-    !ready ? h('div', { class: 'al-src' },
-      h('span', {}, 'Bez zvuku. Spusť pomocníka (stopy s/bez vokálu), nebo '),
+    AL.error ? h('div', { class: 'al-src al-err' }, AL.error) : null,
+    !ready && AL.engine === 'yt' && !AL.error ? h('div', { class: 'al-src' }, 'Načítám YouTube…') : null,
+    !ready && AL.engine !== 'yt' ? h('div', { class: 'al-src' },
+      h('span', {}, editable ? 'Bez zvuku. Přidej ▶ YouTube video, spusť pomocníka, nebo ' : 'Bez zvuku. Spusť pomocníka, nebo '),
       h('button', { class: 'btn', onclick: pickMp3 }, '🎵 vyber MP3')) : null));
 
   const sheet = h('div', { class: 'sheet al-sheet', id: 'alSheet' });
@@ -349,7 +465,7 @@ function renderAlongSheet(sheet) {
 function alLoop() {
   AL.raf = requestAnimationFrame(alLoop);
   if (!$('#alSheet')) { cancelAnimationFrame(AL.raf); AL.raf = 0; return; }
-  if (AL.playing && alNow() >= AL.dur - 0.02) { alPause(); AL.offset = 0; }
+  if (AL.engine === 'wa' && AL.playing && alNow() >= AL.dur - 0.02) { alPause(); AL.offset = 0; }
   alTick(false);
 }
 
