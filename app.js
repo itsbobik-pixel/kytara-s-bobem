@@ -1144,6 +1144,8 @@ function renderSheet() {
   // při hraní je každá část v bloku (ve sloupcích se nerozdělí); štítek části je vpravo u prvního řádku
   let block = play ? null : sheet;
   let markFirst = false;
+  let pendingLabel = null;
+  const inlineLabels = play && settings.cols !== false;
   let markShort = false;
   const newBlock = () => { block = h('div', { class: 'sec-block' }); sheet.append(block); };
   song.lines.forEach((line, li) => {
@@ -1160,7 +1162,9 @@ function renderSheet() {
           onClick: () => openSectionPopover(lab, li),
         }));
       }
-      block.append(h('div', { class: 'sec-head' }, lab));
+      // ve sloupcích štítek na stejný řádek jako první řádek textu (vpravo), jinak nad část
+      if (inlineLabels) pendingLabel = lab;
+      else block.append(h('div', { class: 'sec-head' }, lab));
       markFirst = true;
       // krátká část (1 řádek) potřebuje víc výšky, ať se do ní svislý štítek vejde
       const next = song.lines.findIndex((l, j) => j > li && l.section);
@@ -1168,7 +1172,11 @@ function renderSheet() {
     }
     if (!block) newBlock();
     const empty = !line.text && !line.chords.length;
-    if (play && empty) { block.append(h('div', { class: 'gap' })); return; }
+    if (play && empty) {
+      if (pendingLabel) { block.append(h('div', { class: 'sec-head' }, pendingLabel)); pendingLabel = null; }
+      block.append(h('div', { class: 'gap' }));
+      return;
+    }
 
     const maxPos = line.chords.reduce((m, c) => Math.max(m, c.pos + 1), 0);
     let len = Math.max(line.text.length, maxPos);
@@ -1211,6 +1219,7 @@ function renderSheet() {
         h('button', { title: 'Vložit prázdný řádek pod (třeba pro intro/mezihru)', onclick: () => insertLine(li + 1) }, '+'),
         h('button', { title: 'Smazat řádek', onclick: () => deleteLine(li) }, '×')));
     }
+    if (pendingLabel) { lineEl.classList.add('has-label'); lineEl.append(pendingLabel); pendingLabel = null; }
     block.append(lineEl);
     markFirst = false;
   });

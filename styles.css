@@ -641,3 +641,10 @@ body.playing .topbar { display: none; }
 /* posouvání */
 #asBtn { font-weight: 700; font-size: 13px; white-space: nowrap; }
 #asSpeed { min-width: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ve sloupcích: štítek části vpravo na řádku s textem */
+.line.has-label { padding-right: 4.6em; }
+.line.has-label > .sec-label {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  margin: 0; padding: 2px 8px; font-size: 11px; line-height: 1.4; border-radius: 8px;
+}
