@@ -1249,7 +1249,9 @@ function renderSheet() {
     const empty = !line.text && !line.chords.length;
     const maxPos = line.chords.reduce((m, c) => Math.max(m, c.pos + 1), 0);
     let len = Math.max(line.text.length, maxPos);
-    if (!play) len = line.text ? Math.max(len, line.text.length + 4) : Math.max(len + 3, innerWidth < 600 ? 14 : 28);
+    if (!play) len = line.text ? Math.max(len, line.text.length + 4)
+      : line.chords.length ? len + 4                       // mezihra: za posledním akordem pár volných míst
+      : innerWidth < 600 ? 14 : 28;                        // prázdný řádek: místo na první akordy
     else if (!line.text) len = Math.max(len, 1);
     const lineEl = h('div', {
       class: 'line' + (empty ? ' empty-line' : '') + (!line.text ? ' instr' : '') + extra,

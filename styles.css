@@ -779,3 +779,10 @@ body.al-editing .al-yt { bottom: 236px; }
   box-shadow: 0 12px 40px rgba(0,0,0,.25); pointer-events: none;
 }
 .al-ad[hidden] { display: none; }
+
+/* Řádky bez textu (mezihra, intro z akordů): akordy přímo v řádku, žádné místo na text */
+.line.instr, .play .line.instr.has-chords { line-height: 2; min-height: 2em; padding-top: .1em !important; padding-bottom: .1em; }
+.line.instr .c.pad:has(.chord) { width: auto; }
+.line.instr .chord { position: relative; left: 0; bottom: auto; display: inline-block; vertical-align: middle; margin-right: .3em; }
+.edit .line.instr .c.pad:not(:has(.chord)) { width: .8em; }
+.line.instr { white-space: normal; }
