@@ -466,3 +466,8 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* paralelní tónina */
+.key-btn .rel { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-top: 1px; }
+.key-btn.on .rel { color: inherit; opacity: .75; }
+.res-name small { font-weight: 600; color: var(--muted); font-size: 14px; }

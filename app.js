@@ -172,9 +172,8 @@ const NAMES = {
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const MINOR = [0, 2, 3, 5, 7, 8, 10];
 
-function useFlats(key) {
-  return key.minor ? [2, 7, 0, 5, 10, 3].includes(key.root) : [5, 10, 3, 8, 1].includes(key.root);
-}
+// Názvy tónů vždy s křížky (C# D# F# G#), žádné Es/As/Db. V českém značení zůstává B (= A#) a H.
+function useFlats() { return false; }
 function noteName(root, key) {
   const n = NAMES[settings.notation] || NAMES.cz;
   return (useFlats(key) ? n.flat : n.sharp)[mod(root)];
@@ -184,6 +183,10 @@ function chordName(c, key) {
 }
 function keyName(key) { return noteName(key.root, key) + (key.minor ? ' moll' : ' dur'); }
 function keyShort(key) { return noteName(key.root, key) + (key.minor ? 'm' : ''); }
+/** paralelní tónina: G dur ↔ E moll */
+const relKey = key => key.minor ? { root: mod(key.root + 3), minor: false } : { root: mod(key.root - 3), minor: true };
+const keyBoth = key => `${keyName(key)} / ${keyShort(relKey(key))}`;   // „G dur / Em“
+const keyPair = key => `${keyShort(key)} / ${keyShort(relKey(key))}`;  // „G / Em“
 
 /** stupeň (0–6) akordu v tónině, nebo -1 když je mimo stupnici */
 function degreeOf(root, key) {
@@ -576,7 +579,7 @@ function renderLibrary() {
         h('h3', {}, s.title || 'Bez názvu'),
         h('div', { class: 'artist' }, s.artist || '—'),
         h('div', { class: 'meta' },
-          h('span', { class: 'badge key' }, keyShort(s.key)),
+          h('span', { class: 'badge key' }, keyPair(s.key)),
           s.isPublic === false && h('span', { class: 'badge', title: 'Vidíš jen ty' }, '🔒'),
           s.author && h('span', { class: 'badge author', title: 'Přidal(a)' }, s.author),
           h('span', { class: 'badge' }, chordCount + ' akordů'),
@@ -718,7 +721,7 @@ function openSongModal(existing = null) {
       st.guess
         ? h('div', { class: 'guess' }, h('span', { style: 'font-size:30px' }, '🎯'),
             h('div', {}, h('div', { style: 'font-size:13px;color:var(--muted);font-weight:600' }, `Našel jsem ${found} akordů${secs ? ` a ${secs} částí` : ''}. Odhaduju:`),
-              h('div', { class: 'big' }, keyName(st.guess))))
+              h('div', { class: 'big' }, keyBoth(st.guess))))
         : h('div', { class: 'guess' }, h('span', { style: 'font-size:30px' }, '🎸'),
             h('div', {}, h('div', { style: 'font-weight:700' }, 'Text je bez akordů – vyber, v čem chceš hrát.'),
               h('div', { style: 'font-size:13px;color:var(--muted)' }, `★ = tóniny, které jdou na kytaru nejlíp${secs ? ` · našel jsem ${secs} částí` : ''}`))),
@@ -727,7 +730,7 @@ function openSongModal(existing = null) {
       keyPicker(key, k => { st.key = k.root; st.minor = k.minor; st.capo = 0; step2(); }),
       st.capo ? h('p', { class: 'capo-note' }, `🎸 Hraješ s kapodastrem na ${st.capo}. pražci (zní to v ${keyName(transposeKey(key, st.capo))}).`) : null,
       h('div', { class: 'key-preview' },
-        h('div', { class: 'lbl' }, `Akordy v ${keyName(key)}:`),
+        h('div', { class: 'lbl' }, `Akordy v ${keyBoth(key)}:`),
         h('div', { class: 'chips' }, paletteFor(key).main.map(c =>
           h('span', { class: 'chip static ' + degClass(c.root, key) }, chordName(c, key), h('small', {}, c.roman))))),
       h('div', { class: 'modal-actions' },
@@ -878,7 +881,7 @@ function audioPanel(state, onPick, onTitle) {
       const tip = capoTip(r.key);
       results.append(h('div', { class: 'audio-result' + (i === 0 ? ' best' : '') },
         h('button', { class: 'res-key', onclick: () => onPick(r.key, 0), title: 'Použít tuhle tóninu' },
-          h('span', { class: 'res-name' }, keyName(r.key)),
+          h('span', { class: 'res-name' }, keyName(r.key), h('small', {}, ' / ' + keyShort(relKey(r.key)))),
           h('span', { class: 'res-pct' }, r.pct + ' %'),
           h('span', { class: 'res-bar', style: `--w:${Math.max(4, r.pct)}%` })),
         tip && h('button', {
@@ -921,7 +924,7 @@ function openAudioModal(song) {
       pushUndo(song);
       song.key = k; song.capo = capo || 0;
       touch(song); closeModal(); renderEditor();
-      toast(`Tónina: ${keyName(k)}${capo ? ` · kapo ${capo}` : ''}`, 'Zpět', undo);
+      toast(`Tónina: ${keyBoth(k)}${capo ? ` · kapo ${capo}` : ''}`, 'Zpět', undo);
     }),
     h('div', { class: 'modal-actions' }, h('span'), h('button', { class: 'btn ghost', onclick: closeModal }, 'Zavřít')));
   back.append(modal);
@@ -941,7 +944,7 @@ function keyPicker(key, onPick) {
     grid.append(h('button', {
       class: 'key-btn' + (isRecommended(k) ? ' rec' : '') + (r === key.root ? ' on' : ''),
       onclick: () => onPick(k),
-    }, keyShort(k)));
+    }, keyShort(k), h('small', { class: 'rel' }, keyShort(relKey(k)))));
   }
   box.append(seg, grid);
   return box;
@@ -971,7 +974,7 @@ function renderEditor() {
 
   const controls = h('div', { class: 'controls' },
     h('button', { class: 'key-pill', title: 'Změnit tóninu (nabídku akordů)', onclick: e => openKeyPopover(e.currentTarget) },
-      h('small', {}, 'Tónina'), keyName(song.key)),
+      h('small', {}, 'Tónina'), keyName(song.key), h('small', {}, '/ ' + keyShort(relKey(song.key)))),
     song.capo ? h('button', {
       class: 'capo-pill', title: play ? `Kapodastr na ${song.capo}. pražci` : 'Klikni pro odebrání kapodastru',
       onclick: () => { if (play) return; pushUndo(song); song.capo = 0; touch(song); renderEditor(); toast('Kapodastr odebrán', 'Zpět', undo); },
@@ -1042,7 +1045,7 @@ function renderPalette(song) {
   const custom = song.custom || [];
   return h('aside', { class: 'palette' },
     h('div', { class: 'group' }, h('h4', {}, 'Části písně'), h('div', { class: 'chips' }, SECTIONS.map(secChip))),
-    h('div', { class: 'group' }, h('h4', {}, `Akordy · ${keyName(key)}`), h('div', { class: 'chips' }, pal.main.map(c => chordChip(c, c.roman)))),
+    h('div', { class: 'group' }, h('h4', {}, `Akordy · ${keyBoth(key)}`), h('div', { class: 'chips' }, pal.main.map(c => chordChip(c, c.roman)))),
     h('div', { class: 'group' }, h('h4', {}, 'Další barvy'), h('div', { class: 'chips' }, pal.extra.map(c => chordChip(c)))),
     h('div', { class: 'group' }, h('h4', {}, 'Vlastní'), h('div', { class: 'chips' },
       custom.map(c => chordChip(c)),
@@ -1176,7 +1179,7 @@ function setFont(d) {
 }
 async function copyText() {
   const song = current();
-  const txt = `${song.title}${song.artist ? ' – ' + song.artist : ''}\nTónina: ${keyName(song.key)}\n\n` + songToText(song);
+  const txt = `${song.title}${song.artist ? ' – ' + song.artist : ''}\nTónina: ${keyBoth(song.key)}\n\n` + songToText(song);
   try { await navigator.clipboard.writeText(txt); toast('Zkopírováno do schránky'); }
   catch { toast('Kopírování se nepovedlo'); }
 }
