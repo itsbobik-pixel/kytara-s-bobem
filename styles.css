@@ -770,5 +770,10 @@ body.al-editing .al-yt { bottom: 236px; }
 @media (max-width: 640px) {
   .al-yt { right: 8px; left: 8px; width: auto; height: 200px; bottom: 8px; }
 }
-.al-ad { color: var(--d1-ink); background: color-mix(in srgb, var(--d1) 35%, transparent); padding: 6px 12px; border-radius: 999px; font-weight: 600; }
+.al-ad {
+  position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); z-index: 50; margin: 0;
+  max-width: calc(100vw - 32px); text-align: center; font-size: 18px; font-weight: 700;
+  color: var(--d1-ink); background: var(--d1); padding: 14px 26px; border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25); pointer-events: none;
+}
 .al-ad[hidden] { display: none; }
