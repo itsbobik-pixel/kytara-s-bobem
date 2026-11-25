@@ -93,13 +93,16 @@ window.KSB_SUPA = (() => {
     await reload();
     if (auth.user && !auth.name) openNameModal();
 
-    sb.auth.onAuthStateChange(async (event, sess) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+    // Pozor: uvnitř onAuthStateChange se nesmí čekat na další volání Supabase (zasekne se zámek
+    // přihlášení a např. updateUser nikdy nedoběhne) → práci odložíme mimo callback.
+    sb.auth.onAuthStateChange((event, sess) => {
+      if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'USER_UPDATED') return;
+      setTimeout(async () => {
         const before = auth.user?.id;
         await loadUser(sess);
         if (before !== auth.user?.id) await reload();
         else render();
-      }
+      }, 0);
     });
 
     // po návratu do okna načti novinky od ostatních (když nic neukládám)
@@ -209,15 +212,20 @@ window.KSB_SUPA = (() => {
     const root = $('#modalRoot');
     let name = auth.name || (auth.user?.email || '').split('@')[0].slice(0, 40);
     const input = h('input', { id: 'nickName', maxlength: 40, value: name, oninput: e => (name = e.target.value) });
+    const saveBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Uložit');
+    const err = h('p', { class: 'form-err', role: 'alert' });
     const back = h('div', { class: 'modal-back' });
     back.append(h('div', { class: 'modal narrow', role: 'dialog', 'aria-modal': 'true' },
       h('form', {
         onsubmit: async e => {
           e.preventDefault();
           name = name.trim().slice(0, 40);
-          if (!name) return;
-          const { error } = await sb.auth.updateUser({ data: { name } });
-          if (error) { toast('Přezdívku se nepodařilo uložit'); return; }
+          if (!name) { err.textContent = 'Napiš nějakou přezdívku.'; return; }
+          saveBtn.disabled = true; saveBtn.textContent = 'Ukládám…'; err.textContent = '';
+          const timeout = new Promise(r => setTimeout(() => r({ error: { message: 'timeout' } }), 12000));
+          const { error } = await Promise.race([sb.auth.updateUser({ data: { name } }), timeout]);
+          saveBtn.disabled = false; saveBtn.textContent = 'Uložit';
+          if (error) { err.textContent = 'Přezdívku se nepodařilo uložit. Zkus to znovu.'; return; }
           auth.name = name;
           closeModal(); render();
           toast(`Vítej, ${name}! 🎸`);
@@ -226,7 +234,8 @@ window.KSB_SUPA = (() => {
         h('h2', {}, 'Jak ti říkat?'),
         h('p', { class: 'sub' }, 'Tohle jméno uvidí ostatní u songů, které přidáš.'),
         h('label', { class: 'field' }, h('span', {}, 'Přezdívka'), input),
-        h('div', { class: 'modal-actions' }, h('span'), h('button', { class: 'btn primary', type: 'submit' }, 'Uložit')))));
+        err,
+        h('div', { class: 'modal-actions' }, h('span'), saveBtn))));
     root.innerHTML = '';
     root.append(back);
     setTimeout(() => input.select(), 30);
