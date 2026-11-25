@@ -633,3 +633,7 @@ body.playing .topbar { display: none; }
   min-width: 34px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted);
 }
 .tgroup .tr-val.moved { color: var(--d4); }
+
+/* žádné prázdné místo pod písničkou při hraní */
+.editor.play { padding-bottom: 16px; }
+.play .sheet-wrap { padding-bottom: 8px; min-height: 0; }
