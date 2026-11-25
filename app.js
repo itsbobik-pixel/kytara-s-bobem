@@ -1145,6 +1145,7 @@ function renderSheet() {
   let block = play ? null : sheet;
   let markFirst = false;
   let pendingLabel = null;
+  let blockStart = true;   // první řádek barevného pole → potřebuje nahoře místo na akordy
   const inlineLabels = play && settings.cols === false;   // jeden sloupec: štítek vpravo na řádku s textem
   let markShort = false;
   const newBlock = () => { block = h('div', { class: 'sec-block' }); sheet.append(block); };
@@ -1166,6 +1167,7 @@ function renderSheet() {
       if (inlineLabels) pendingLabel = lab;
       else block.append(h('div', { class: 'sec-head' }, lab));
       markFirst = true;
+      blockStart = true;
       // krátká část (1 řádek) potřebuje víc výšky, ať se do ní svislý štítek vejde
       const next = song.lines.findIndex((l, j) => j > li && l.section);
       markShort = (next < 0 ? song.lines.length : next) - li <= 1;
@@ -1175,6 +1177,7 @@ function renderSheet() {
     if (play && empty) {
       if (pendingLabel) { block.append(h('div', { class: 'sec-head' }, pendingLabel)); pendingLabel = null; }
       block.append(h('div', { class: 'gap' }));
+      blockStart = true;
       return;
     }
 
@@ -1184,7 +1187,7 @@ function renderSheet() {
     else if (!line.text) len = Math.max(len, 1);
 
     const lineEl = h('div', {
-      class: 'line' + (empty ? ' empty-line' : '') + (!line.text ? ' instr' : '') + (markFirst ? ' sec-first' : '') + (markFirst && markShort ? ' sec-short' : '') + (line.chords.length ? ' has-chords' : ''),
+      class: 'line' + (empty ? ' empty-line' : '') + (!line.text ? ' instr' : '') + (markFirst ? ' sec-first' : '') + (markFirst && markShort ? ' sec-short' : '') + (line.chords.length ? ' has-chords' : '') + (blockStart ? ' block-start' : ''),
       'data-li': li, 'data-s': sec || null,
     });
     const byPos = new Map(line.chords.map(c => [c.pos, c]));
@@ -1222,6 +1225,7 @@ function renderSheet() {
     if (pendingLabel) { lineEl.classList.add('has-label'); lineEl.append(pendingLabel); pendingLabel = null; }
     block.append(lineEl);
     markFirst = false;
+    blockStart = false;
   });
 
   if (!play) {

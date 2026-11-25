@@ -648,3 +648,6 @@ body.playing .topbar { display: none; }
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   margin: 0; padding: 2px 8px; font-size: 11px; line-height: 1.4; border-radius: 8px;
 }
+
+/* akordy prvního řádku se vejdou do barevného pole */
+.line.block-start.has-chords { padding-top: .5em; }
