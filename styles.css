@@ -381,6 +381,50 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .toast button { border: none; background: var(--d1); color: #2A1E00; font-weight: 800; padding: 5px 12px; border-radius: 999px; cursor: pointer; }
 
+/* ---------- tónina z nahrávky ---------- */
+.audio-box {
+  border: 2px dashed var(--line); border-radius: 18px; padding: 14px 16px; margin-bottom: 16px;
+  display: grid; gap: 10px; transition: border-color .15s ease, background .15s ease;
+}
+.audio-box.over { border-color: var(--d3); background: color-mix(in srgb, var(--d3) 8%, transparent); }
+.audio-box.busy .audio-row { opacity: .5; pointer-events: none; }
+.audio-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.audio-head span { font-size: 12px; color: var(--muted); }
+.audio-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.yt-form { display: flex; gap: 6px; flex: 1 1 240px; min-width: 0; }
+.yt-input {
+  flex: 1; min-width: 0; border: 1.5px solid var(--line); border-radius: 999px; padding: 8px 14px;
+  background: var(--bg); outline: none;
+}
+.yt-input:focus { border-color: var(--d0); }
+.audio-status { font-size: 13px; color: var(--muted); min-height: 1em; }
+.audio-status:empty { display: none; }
+.audio-status.err { color: var(--d0); font-weight: 600; }
+.audio-results { display: grid; gap: 6px; }
+.audio-results:empty { display: none; }
+.audio-result { display: flex; gap: 6px; align-items: stretch; }
+.res-key {
+  position: relative; flex: 1; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  border: 1.5px solid var(--line); background: var(--surface); border-radius: 12px; padding: 9px 14px;
+  cursor: pointer; overflow: hidden; text-align: left;
+}
+.res-key:hover { border-color: var(--ink); }
+.res-bar { position: absolute; left: 0; bottom: 0; height: 4px; width: var(--w); background: var(--d4); border-radius: 0 4px 4px 0; }
+.audio-result.best .res-key { border-color: var(--d4); }
+.audio-result.best .res-bar { background: linear-gradient(90deg, var(--d0), var(--d5), var(--d4)); }
+.res-name { font-weight: 800; font-size: 17px; }
+.res-pct { font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.res-capo {
+  border: none; border-radius: 12px; padding: 0 12px; cursor: pointer; font-weight: 700; font-size: 13px;
+  background: color-mix(in srgb, var(--d6) 16%, var(--surface)); color: var(--ink); white-space: nowrap;
+}
+.res-capo:hover { background: var(--d6); color: #fff; }
+.capo-note { font-size: 13px; font-weight: 600; margin: 12px 0 0; }
+.capo-pill {
+  border: none; cursor: pointer; padding: 8px 14px; border-radius: 999px; font-weight: 800;
+  background: var(--d6); color: #fff;
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
   .editor { grid-template-columns: minmax(0, 1fr); padding-bottom: 46vh; }

@@ -417,14 +417,14 @@ let autoscroll = { on: false, speed: 2, raf: 0, last: 0, acc: 0 };
 const current = () => songs.find(s => s.id === route.id);
 function touch(song) { song.updated = Date.now(); saveSongs(); }
 function pushUndo(song) {
-  undoStack.push({ id: song.id, lines: clone(song.lines), key: clone(song.key), custom: clone(song.custom || []) });
+  undoStack.push({ id: song.id, lines: clone(song.lines), key: clone(song.key), custom: clone(song.custom || []), capo: song.capo || 0 });
   if (undoStack.length > 60) undoStack.shift();
 }
 function undo() {
   const u = undoStack.pop();
   const song = u && songs.find(s => s.id === u.id);
   if (!song) return;
-  song.lines = u.lines; song.key = u.key; song.custom = u.custom;
+  song.lines = u.lines; song.key = u.key; song.custom = u.custom; song.capo = u.capo || 0;
   touch(song);
   renderEditor();
   toast('Vráceno zpět');
@@ -680,7 +680,10 @@ function openSongModal(existing = null) {
         : h('div', { class: 'guess' }, h('span', { style: 'font-size:30px' }, '🎸'),
             h('div', {}, h('div', { style: 'font-weight:700' }, 'Text je bez akordů – vyber, v čem chceš hrát.'),
               h('div', { style: 'font-size:13px;color:var(--muted)' }, `★ = tóniny, které jdou na kytaru nejlíp${secs ? ` · našel jsem ${secs} částí` : ''}`))),
-      keyPicker(key, k => { st.key = k.root; st.minor = k.minor; step2(); }),
+      audioPanel(st.audio || (st.audio = {}), (k, capo) => { st.key = k.root; st.minor = k.minor; st.capo = capo || 0; step2(); },
+        title => { if (!st.title.trim()) st.title = title; }),
+      keyPicker(key, k => { st.key = k.root; st.minor = k.minor; st.capo = 0; step2(); }),
+      st.capo ? h('p', { class: 'capo-note' }, `🎸 Hraješ s kapodastrem na ${st.capo}. pražci (zní to v ${keyName(transposeKey(key, st.capo))}).`) : null,
       h('div', { class: 'key-preview' },
         h('div', { class: 'lbl' }, `Akordy v ${keyName(key)}:`),
         h('div', { class: 'chips' }, paletteFor(key).main.map(c =>
@@ -696,6 +699,7 @@ function openSongModal(existing = null) {
       title: st.title.trim() || 'Bez názvu',
       artist: st.artist.trim(),
       key: { root: st.key, minor: st.minor },
+      capo: st.capo || 0,
       lines: st.lines,
       custom: [],
       updated: Date.now(),
@@ -725,6 +729,160 @@ function applyTextEdit(song, st) {
   touch(song);
   renderEditor();
   toast('Text uložen', 'Zpět', undo);
+}
+
+// =========================================================
+//  TÓNINA Z NAHRÁVKY (MP3 / YouTube přes lokálního pomocníka)
+// =========================================================
+const HELPER = 'http://127.0.0.1:5174';
+const EASY = { major: [7, 2, 0, 9, 4], minor: [4, 9, 2] };   // G D C A E · Em Am Dm
+const transposeKey = (key, n) => ({ root: mod(key.root + n), minor: key.minor });
+
+/** Když tónina není kytarově pohodlná, najdi nejnižší kapodastr s pohodlným tvarem. */
+function capoTip(key) {
+  const easy = key.minor ? EASY.minor : EASY.major;
+  if (easy.includes(key.root)) return null;
+  for (let capo = 1; capo <= 7; capo++) {
+    const shape = transposeKey(key, -capo);
+    if (easy.includes(shape.root)) return { capo, shape };
+  }
+  return null;
+}
+
+let helperState = null;   // null = neověřeno, true/false
+async function helperAlive() {
+  if (helperState !== null) return helperState;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 1200);
+    const r = await fetch(HELPER + '/health', { signal: ctrl.signal });
+    clearTimeout(t);
+    helperState = r.ok;
+  } catch { helperState = false; }
+  setTimeout(() => { helperState = null; }, 15000);   // za chvíli zkus znovu
+  return helperState;
+}
+
+/**
+ * Panel „Poznat z nahrávky“. `state` přežije překreslení modalu.
+ * onPick(key, capo) – zvolená tónina; onTitle(title) – název z YouTube
+ */
+function audioPanel(state, onPick, onTitle) {
+  const box = h('div', { class: 'audio-box' + (state.busy ? ' busy' : '') });
+  const status = h('div', { class: 'audio-status', role: 'status' }, state.status || '');
+  const results = h('div', { class: 'audio-results' });
+
+  const setStatus = (t, err) => { state.status = t; status.textContent = t; status.classList.toggle('err', !!err); };
+  const setBusy = b => { state.busy = b; box.classList.toggle('busy', b); };
+
+  async function run(getBuffer, label) {
+    if (state.busy) return;
+    setBusy(true);
+    try {
+      setStatus(label);
+      const buf = await getBuffer();
+      setStatus('🎧 Poslouchám…');
+      const res = await KeyDetect.analyze(buf, p => setStatus(`🎧 Poslouchám… ${Math.round(p * 100)} %`));
+      state.results = res.keys.map(k => ({ key: k.key, pct: k.pct }));
+      state.tuning = res.tuningCents;
+      setStatus(`Hotovo · nahrávka ${fmtTime(res.duration)}${Math.abs(res.tuningCents) > 25 ? ` · ladění ${res.tuningCents > 0 ? '+' : ''}${res.tuningCents} centů` : ''}`);
+      drawResults();
+    } catch (e) {
+      setStatus(e?.userMessage || 'Tuhle nahrávku se nepodařilo přečíst. Zkus jiný soubor (mp3, m4a, wav).', true);
+    } finally { setBusy(false); }
+  }
+
+  const fileIn = h('input', { type: 'file', accept: 'audio/*,.mp3,.m4a,.wav,.ogg,.flac,.webm', hidden: true });
+  fileIn.onchange = () => {
+    const f = fileIn.files[0];
+    if (!f) return;
+    state.source = f.name;
+    if (onTitle) onTitle(f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' '));
+    run(() => f.arrayBuffer(), `Načítám ${f.name}…`);
+  };
+
+  const ytIn = h('input', { type: 'url', class: 'yt-input', placeholder: 'nebo vlož YouTube odkaz…', value: state.yt || '', oninput: e => (state.yt = e.target.value) });
+  const ytForm = h('form', {
+    class: 'yt-form',
+    onsubmit: async e => {
+      e.preventDefault();
+      const url = ytIn.value.trim();
+      if (!/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(url)) { setStatus('Tohle nevypadá jako odkaz na YouTube.', true); return; }
+      if (!(await helperAlive())) {
+        setStatus('YouTube potřebuje pomocníka na tvém počítači: spusť „spustit-pomocnika.bat“ a zkus to znovu.', true);
+        return;
+      }
+      run(async () => {
+        const r = await fetch(HELPER + '/audio?url=' + encodeURIComponent(url));
+        if (!r.ok) {
+          let msg = 'Stažení z YouTube se nepovedlo.';
+          try { msg = (await r.json()).error || msg; } catch { /* nic */ }
+          throw { userMessage: msg };
+        }
+        const title = decodeURIComponent(r.headers.get('X-Title') || '');
+        if (title && onTitle) onTitle(title);
+        setStatus('⬇ Staženo, připravuju…');
+        return r.arrayBuffer();
+      }, '⬇ Stahuju zvuk z YouTube…');
+    },
+  }, ytIn, h('button', { class: 'btn', type: 'submit' }, 'Poznat'));
+
+  function drawResults() {
+    results.innerHTML = '';
+    if (!state.results) return;
+    state.results.forEach((r, i) => {
+      const tip = capoTip(r.key);
+      results.append(h('div', { class: 'audio-result' + (i === 0 ? ' best' : '') },
+        h('button', { class: 'res-key', onclick: () => onPick(r.key, 0), title: 'Použít tuhle tóninu' },
+          h('span', { class: 'res-name' }, keyName(r.key)),
+          h('span', { class: 'res-pct' }, r.pct + ' %'),
+          h('span', { class: 'res-bar', style: `--w:${Math.max(4, r.pct)}%` })),
+        tip && h('button', {
+          class: 'res-capo', onclick: () => onPick(tip.shape, tip.capo),
+          title: `Hraj tvary z ${keyName(tip.shape)} s kapodastrem`,
+        }, `🎸 kapo ${tip.capo} → ${keyShort(tip.shape)}`)));
+    });
+  }
+
+  // přetažení souboru na panel
+  box.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('over'); });
+  box.addEventListener('dragleave', () => box.classList.remove('over'));
+  box.addEventListener('drop', e => {
+    e.preventDefault(); box.classList.remove('over');
+    const f = [...(e.dataTransfer?.files || [])].find(f => f.type.startsWith('audio') || /\.(mp3|m4a|wav|ogg|flac|webm)$/i.test(f.name));
+    if (f) { const dt = new DataTransfer(); dt.items.add(f); fileIn.files = dt.files; fileIn.onchange(); }
+  });
+
+  box.append(
+    h('div', { class: 'audio-head' },
+      h('b', {}, '🎧 Poznat tóninu z nahrávky'),
+      h('span', {}, 'Soubor zůstane jen u tebe, nikam se neposílá.')),
+    h('div', { class: 'audio-row' },
+      h('button', { class: 'btn primary', type: 'button', onclick: () => fileIn.click() }, '⬆ Nahrát MP3'),
+      ytForm),
+    fileIn, status, results);
+  drawResults();
+  return box;
+}
+const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+function openAudioModal(song) {
+  const root = $('#modalRoot');
+  const state = {};
+  const back = h('div', { class: 'modal-back', onpointerdown: e => { if (e.target === back) closeModal(); } });
+  const modal = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' },
+    h('h2', {}, 'Tónina z nahrávky'),
+    h('p', { class: 'sub' }, 'Nahraj písničku nebo vlož YouTube odkaz. Vybraná tónina změní nabídku akordů.'),
+    audioPanel(state, (k, capo) => {
+      pushUndo(song);
+      song.key = k; song.capo = capo || 0;
+      touch(song); closeModal(); renderEditor();
+      toast(`Tónina: ${keyName(k)}${capo ? ` · kapo ${capo}` : ''}`, 'Zpět', undo);
+    }),
+    h('div', { class: 'modal-actions' }, h('span'), h('button', { class: 'btn ghost', onclick: closeModal }, 'Zavřít')));
+  back.append(modal);
+  root.innerHTML = '';
+  root.append(back);
 }
 
 /** mřížka 12 tónin + přepínač dur/moll */
@@ -769,6 +927,11 @@ function renderEditor() {
   const controls = h('div', { class: 'controls' },
     h('button', { class: 'key-pill', title: 'Změnit tóninu (nabídku akordů)', onclick: e => openKeyPopover(e.currentTarget) },
       h('small', {}, 'Tónina'), keyName(song.key)),
+    song.capo ? h('button', {
+      class: 'capo-pill', title: play ? `Kapodastr na ${song.capo}. pražci` : 'Klikni pro odebrání kapodastru',
+      onclick: () => { if (play) return; pushUndo(song); song.capo = 0; touch(song); renderEditor(); toast('Kapodastr odebrán', 'Zpět', undo); },
+    }, `Kapo ${song.capo}`) : null,
+    !play && h('button', { class: 'btn', onclick: () => openAudioModal(song), title: 'Poznat tóninu z MP3 nebo YouTube' }, '🎧 Z nahrávky'),
     h('div', { class: 'tgroup', title: 'Transpozice – posune všechny akordy' },
       h('button', { onclick: () => transpose(-1), 'aria-label': 'Transponovat dolů' }, '−'),
       h('span', {}, 'transp.'),
