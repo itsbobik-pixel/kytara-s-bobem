@@ -1024,6 +1024,10 @@ function renderEditor() {
       h('button', { onclick: () => transpose(1), 'aria-label': 'Transponovat nahoru' }, '+')),
     play && h('div', { class: 'tgroup', title: 'Velikost písma' },
       h('button', { onclick: () => setFont(-1) }, 'A−'),
+      h('button', {
+        id: 'fsVal', class: 'tr-val' + (fontStep() ? ' moved' : ''),
+        title: 'Velikost písma – klik vrátí výchozí', onclick: () => setFont(-fontStep()),
+      }, stepLabel(fontStep())),
       h('button', { onclick: () => setFont(1) }, 'A+')),
     play && h('div', { class: 'tgroup', title: 'Automatické posouvání' },
       h('button', { class: autoscroll.on ? 'on' : '', id: 'asBtn', onclick: toggleAutoscroll }, autoscroll.on ? '⏸' : '⏬'),
@@ -1341,10 +1345,15 @@ function transpose(n) {
   touch(song);
   renderEditor();
 }
+const FONT_DEFAULT = 19;
+const fontStep = () => Math.round((settings.fontSize - FONT_DEFAULT) / 2);
+const stepLabel = d => d > 0 ? '+' + d : d < 0 ? '−' + (-d) : '0';
 function setFont(d) {
-  settings.fontSize = Math.min(32, Math.max(14, settings.fontSize + d * 2));
+  settings.fontSize = Math.min(33, Math.max(13, settings.fontSize + d * 2));
   saveSettings();
   document.documentElement.style.setProperty('--fs', settings.fontSize + 'px');
+  const b = $('#fsVal');
+  if (b) { b.textContent = stepLabel(fontStep()); b.classList.toggle('moved', fontStep() !== 0); }
 }
 async function copyText() {
   const song = current();
