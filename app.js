@@ -1862,5 +1862,7 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// se Supabase se songy teprve načítají → odkaz na konkrétní song nesmí hned přesměrovat na seznam
+if (window.KSB_SUPA) auth.loading = true;
 render();
 if (window.KSB_SUPA) window.KSB_SUPA.init(); else cloud.init();

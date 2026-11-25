@@ -221,6 +221,14 @@ function ytNow() {
   if (!AL.ytReady || !AL.yt?.getCurrentTime) return AL.offset;
   if (ytIsAd()) { AL.ytAd = true; AL.ytRaw = null; return AL.offset; }   // text čeká, kde byl
   const raw = AL.yt.getCurrentTime() || 0;
+  // Během reklamy hlásí YouTube stav -1 („nespuštěno“) a getCurrentTime vrací čas REKLAMY.
+  // Čas písničky platí jen ve stavech hraje / pauza / načítání / konec.
+  const st = AL.yt.getPlayerState?.();
+  if (st === -1 || st === 5) {
+    AL.ytAd = st === -1 && raw > 0.05;
+    AL.ytRaw = null; AL.ytMoved = false;
+    return AL.offset;
+  }
   const p = performance.now();
   if (raw !== AL.ytRaw) {
     if (AL.ytRaw != null && AL.ytState === 1 && raw > AL.ytRaw) AL.ytMoved = true;
