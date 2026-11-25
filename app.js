@@ -39,8 +39,8 @@ const settings = Object.assign({ notation: 'intl', fontSize: 19 }, load(LS_SETTI
 // v2: výchozí značení je mezinárodní (A#, B) – jednorázově přepni i dřív uložené nastavení
 if (settings.nv !== 2) { settings.notation = 'intl'; settings.nv = 2; persist(LS_SETTINGS, settings); }
 const saveSettings = () => persist(LS_SETTINGS, settings);
-function saveSongs() {
-  if (auth.mode === 'supabase') { window.KSB_SUPA.schedule(); return; }
+function saveSongs(now = false) {
+  if (auth.mode === 'supabase') { window.KSB_SUPA.schedule(now ? 0 : undefined); return; }
   persist(LS_SONGS, songs);
   cloud.schedule();
 }
@@ -1049,7 +1049,10 @@ function renderEditor() {
     }, song.isPublic === false ? '🔒 Jen pro mě' : '🌍 Veřejný'),
     play
       ? (editable ? h('a', { class: 'btn primary', href: '#song-' + song.id }, '✎ Upravit') : null)
-      : h('a', { class: 'btn rainbow', href: '#play-' + song.id }, '▶ Hrát'));
+      : h('button', {
+          class: 'btn rainbow', title: 'Uložit a přepnout na hraní',
+          onclick: () => { touch(song); saveSongs(true); go('#play-' + song.id); toast('Uloženo ✓'); },
+        }, '💾 Uložit'));
 
   document.body.classList.toggle('playing', play);
   if (play) {
