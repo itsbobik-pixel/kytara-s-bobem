@@ -1060,7 +1060,7 @@ function renderEditor() {
     controls.prepend(h('button', {
       class: 'tbtn' + (settings.cols !== false ? ' on' : ''), title: 'Text do sloupců / jeden sloupec',
       onclick: () => { settings.cols = settings.cols === false; saveSettings(); renderEditor(); },
-    }, settings.cols !== false ? 'Sloupce' : '1 sloupec'));
+    }, settings.cols !== false ? 'Sloupce' : 'Sloupec'));
     ed.append(h('div', { class: 'play-bar' },
       h('a', { class: 'pb-back', href: '#', title: 'Zpět na seznam' }, '←'),
       h('div', { class: 'pb-name', title: (song.artist ? song.artist + ' – ' : '') + song.title },
