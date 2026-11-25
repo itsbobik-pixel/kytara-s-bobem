@@ -397,10 +397,6 @@ function renderAlongBody() {
         disabled: !ready, 'aria-label': 'Posun v písničce',
         oninput: e => alSeek(+e.target.value),
       }),
-      h('div', { class: 'tgroup', title: 'Transpozice – jen pro zobrazení, písnička se nemění' },
-        h('button', { onclick: () => transpose(-1), 'aria-label': 'Transponovat dolů' }, '−'),
-        h('button', { class: 'tr-val' + (viewShift ? ' moved' : ''), onclick: () => { if (viewShift) transpose(-viewShift); }, title: 'Klik vrátí originál' }, stepLabel(viewShift)),
-        h('button', { onclick: () => transpose(1), 'aria-label': 'Transponovat nahoru' }, '+')),
       capoControl(),
       AL.hasStems && AL.sync?.yt ? h('button', {
         class: 'tbtn', title: 'Přepnout, odkud hraje hudba. YouTube = tak, jak to slyší ostatní.',
