@@ -94,3 +94,39 @@ grant select on public.songs to anon, authenticated;
 grant insert, update, delete on public.songs to authenticated;
 grant select on public.admins to authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
+
+-- ---------- Schvalování (přidáno později) ----------
+--  • nové songy od ostatních vidí jen autor a admin, dokud je admin neschválí
+--  • upravit/smazat: admin vždy, autor jen svůj neschválený song
+--  • schválit smí jen admin (hlídá trigger), song od admina je schválený hned
+alter table public.songs add column if not exists approved boolean not null default false;
+
+create or replace function public.guard_approved()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if public.is_admin() then
+    if tg_op = 'INSERT' then new.approved := true; end if;
+  else
+    if tg_op = 'INSERT' then new.approved := false; else new.approved := old.approved; end if;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists songs_guard_approved on public.songs;
+create trigger songs_guard_approved before insert or update on public.songs
+  for each row execute function public.guard_approved();
+
+drop policy if exists "songs: číst veřejné a svoje" on public.songs;
+create policy "songs: číst veřejné a svoje" on public.songs
+  for select using ((is_public and approved) or owner = auth.uid() or public.is_admin());
+
+drop policy if exists "songs: upravit svoje nebo admin" on public.songs;
+create policy "songs: upravit svoje nebo admin" on public.songs
+  for update to authenticated
+  using (public.is_admin() or (owner = auth.uid() and not approved))
+  with check (public.is_admin() or (owner = auth.uid() and not approved));
+
+drop policy if exists "songs: smazat svoje nebo admin" on public.songs;
+create policy "songs: smazat svoje nebo admin" on public.songs
+  for delete to authenticated
+  using (public.is_admin() or (owner = auth.uid() and not approved));

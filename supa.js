@@ -26,13 +26,14 @@ window.KSB_SUPA = (() => {
   });
   // Seznam stahuje jen názvy (šetří přenos dat); celá písnička se načte až při otevření.
   // Nenačtená písnička má partial: true a NIKDY se neukládá (jinak by se v databázi přepsala prázdnou).
-  const META = 'id, owner, author_name, title, artist, is_public, updated_at';
-  const FULL = META + ', data';
+  const META = 'id, owner, author_name, title, artist, is_public, approved, updated_at, sync_dur:data->sync->>dur';
+  const FULL = 'id, owner, author_name, title, artist, is_public, approved, updated_at, data';
   const fromMeta = r => ({
     id: r.id, title: r.title, artist: r.artist,
     key: { root: 7, minor: false }, capo: 0, baseKey: null, lines: [], custom: [], sync: null,
     updated: Date.parse(r.updated_at) || 0, serverUpdated: r.updated_at,
     owner: r.owner, author: r.author_name || '', isPublic: r.is_public,
+    approved: r.approved !== false, hasSync: r.sync_dur != null,
     partial: true,
   });
   const fromRow = r => ({
@@ -50,6 +51,8 @@ window.KSB_SUPA = (() => {
     owner: r.owner,
     author: r.author_name || '',
     isPublic: r.is_public,
+    approved: r.approved !== false,
+    hasSync: !!r.data?.sync,
   });
 
   async function fetchSongs() {
@@ -63,7 +66,7 @@ window.KSB_SUPA = (() => {
     return data.map(r => {
       const p = prev.get(r.id);
       if (p && !p.partial && p.serverUpdated === r.updated_at) {
-        p.title = r.title; p.artist = r.artist; p.owner = r.owner; p.author = r.author_name || ''; p.isPublic = r.is_public;
+        p.title = r.title; p.artist = r.artist; p.owner = r.owner; p.author = r.author_name || ''; p.isPublic = r.is_public; p.approved = r.approved !== false;
         return p;
       }
       return fromMeta(r);
@@ -98,6 +101,14 @@ window.KSB_SUPA = (() => {
     })().finally(() => loading.delete(id));
     loading.set(id, pr);
     return pr;
+  }
+
+  /** admin: schválit song (pak ho vidí všichni) */
+  async function approve(id) {
+    const { data, error } = await sb.from('songs').update({ approved: true }).eq('id', id).select('updated_at').maybeSingle();
+    if (error || !data) throw error || new Error('nic');
+    const s = songs.find(x => x.id === id);
+    if (s) { s.approved = true; s.serverUpdated = data.updated_at; }
   }
 
   /** načte všechny nenačtené písničky (pro zálohu) */
@@ -199,8 +210,12 @@ window.KSB_SUPA = (() => {
           if (!res.error && res.data) s.serverUpdated = res.data.updated_at;
         } else {
           res = await sb.from('songs').insert({ id: s.id, author_name: auth.name || 'Kytarista', ...p })
-            .select('owner, author_name, updated_at').single();
-          if (!res.error) { inDb.add(s.id); editable.add(s.id); s.owner = res.data.owner; s.author = res.data.author_name; s.serverUpdated = res.data.updated_at; }
+            .select('owner, author_name, updated_at, approved').single();
+          if (!res.error) {
+            inDb.add(s.id); editable.add(s.id); s.owner = res.data.owner; s.author = res.data.author_name; s.serverUpdated = res.data.updated_at;
+            s.approved = res.data.approved;
+            if (!s.approved) toast('Song je uložený. Ostatní ho uvidí, až ho admin schválí.');
+          }
         }
         if (res.error) { failed = true; console.warn('Uložení selhalo', s.id, res.error.message); continue; }
         synced.set(s.id, json);
@@ -323,5 +338,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, importLocal, ensureLoaded, loadAll };
+  return { init, schedule, openLogin, openNameModal, logout, importLocal, ensureLoaded, loadAll, approve };
 })();

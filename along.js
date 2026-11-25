@@ -401,6 +401,7 @@ function renderAlongBody() {
         h('button', { onclick: () => transpose(-1), 'aria-label': 'Transponovat dolů' }, '−'),
         h('button', { class: 'tr-val' + (viewShift ? ' moved' : ''), onclick: () => { if (viewShift) transpose(-viewShift); }, title: 'Klik vrátí originál' }, stepLabel(viewShift)),
         h('button', { onclick: () => transpose(1), 'aria-label': 'Transponovat nahoru' }, '+')),
+      capoControl(),
       AL.hasStems && AL.sync?.yt ? h('button', {
         class: 'tbtn', title: 'Přepnout, odkud hraje hudba. YouTube = tak, jak to slyší ostatní.',
         onclick: () => alSwitchSource(AL.engine === 'yt' ? 'wa' : 'yt'),
