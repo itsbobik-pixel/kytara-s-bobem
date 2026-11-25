@@ -625,3 +625,11 @@ body.playing .topbar { display: none; }
 .sec-label { border-radius: 8px 8px 0 8px; }
 .line { border-left: none; border-right: 4px solid transparent; }
 .line[data-s] { border-right-color: var(--sc); }
+
+/* tónina u názvu, číslo transpozice */
+.pb-key { color: var(--muted); font-weight: 600; font-size: 15px; }
+.titles .key-pill { margin-top: 8px; }
+.tgroup .tr-val {
+  min-width: 34px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted);
+}
+.tgroup .tr-val.moved { color: var(--d4); }

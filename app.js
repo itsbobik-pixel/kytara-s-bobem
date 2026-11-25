@@ -958,7 +958,7 @@ function openAudioModal(song) {
     h('p', { class: 'sub' }, 'Nahraj písničku nebo vlož YouTube odkaz. Vybraná tónina změní nabídku akordů.'),
     audioPanel(state, (k, capo) => {
       pushUndo(song);
-      song.key = k; song.capo = capo || 0;
+      song.key = k; song.baseKey = null; song.capo = capo || 0;
       touch(song); closeModal(); renderEditor();
       toast(`Tónina: ${keyBoth(k)}${capo ? ` · kapo ${capo}` : ''}`, 'Zpět', undo);
     }),
@@ -1009,8 +1009,6 @@ function renderEditor() {
   const artistIn = h('input', { class: 'artist-input', value: song.artist || '', placeholder: 'Interpret', 'aria-label': 'Interpret', oninput: e => { song.artist = e.target.value; touch(song); } });
 
   const controls = h('div', { class: 'controls' },
-    h('button', { class: 'key-pill', title: 'Změnit tóninu (nabídku akordů)', onclick: e => openKeyPopover(e.currentTarget) },
-      h('small', {}, 'Tónina'), keyName(song.key), h('small', {}, '/ ' + keyShort(relKey(song.key)))),
     song.capo ? h('button', {
       class: 'capo-pill', title: play ? `Kapodastr na ${song.capo}. pražci` : 'Klikni pro odebrání kapodastru',
       onclick: () => { if (play) return; pushUndo(song); song.capo = 0; touch(song); renderEditor(); toast('Kapodastr odebrán', 'Zpět', undo); },
@@ -1018,7 +1016,11 @@ function renderEditor() {
     !play && h('button', { class: 'btn', onclick: () => openAudioModal(song), title: 'Poznat tóninu z MP3 nebo YouTube' }, '🎧 Z nahrávky'),
     h('div', { class: 'tgroup', title: 'Transpozice – posune všechny akordy' },
       h('button', { onclick: () => transpose(-1), 'aria-label': 'Transponovat dolů' }, '−'),
-      h('span', {}, 'transp.'),
+      h('button', {
+        class: 'tr-val' + (transOffset(song) ? ' moved' : ''),
+        title: transOffset(song) ? 'Posunuto oproti původní tónině – klik vrátí původní' : 'Původní tónina',
+        onclick: () => { const d = transOffset(song); if (d) transpose(-d); },
+      }, transLabel(song)),
       h('button', { onclick: () => transpose(1), 'aria-label': 'Transponovat nahoru' }, '+')),
     play && h('div', { class: 'tgroup', title: 'Velikost písma' },
       h('button', { onclick: () => setFont(-1) }, 'A−'),
@@ -1056,11 +1058,14 @@ function renderEditor() {
       h('a', { class: 'pb-back', href: '#', title: 'Zpět na seznam' }, '←'),
       h('div', { class: 'pb-name', title: (song.artist ? song.artist + ' – ' : '') + song.title },
         song.artist ? h('span', { class: 'pb-artist' }, song.artist + ' – ') : null,
-        h('b', {}, song.title || 'Bez názvu')),
+        h('b', {}, song.title || 'Bez názvu'),
+        h('span', { class: 'pb-key' }, ' · ' + keyName(song.key) + ' / ' + keyShort(relKey(song.key)))),
       controls));
   } else {
     ed.append(h('div', { class: 'song-head' },
       h('div', { class: 'titles' }, titleIn, artistIn,
+        h('button', { class: 'key-pill', title: 'Změnit tóninu (nabídku akordů)', onclick: e => openKeyPopover(e.currentTarget) },
+          h('small', {}, 'Tónina'), keyName(song.key), h('small', {}, '/ ' + keyShort(relKey(song.key)))),
         song.author && auth.mode === 'supabase' ? h('div', { class: 'by' }, 'přidal(a) ', h('b', {}, song.author)) : null),
       controls));
   }
@@ -1315,9 +1320,19 @@ function deleteLine(li) {
   touch(song); renderSheet();
   toast('Řádek smazán', 'Zpět', undo);
 }
+/** o kolik půltónů je song posunutý oproti původní tónině (−5 … +6) */
+function transOffset(song) {
+  if (!song.baseKey) return 0;
+  let d = mod(song.key.root - song.baseKey.root);
+  if (d > 6) d -= 12;
+  return d;
+}
+const transLabel = song => { const d = transOffset(song); return d > 0 ? '+' + d : d < 0 ? '−' + (-d) : '0'; };
+
 function transpose(n) {
   const song = current();
   pushUndo(song);
+  if (!song.baseKey) song.baseKey = clone(song.key);   // zapamatuj původní tóninu
   const sh = c => { c.root = mod(c.root + n); if (c.bass != null) c.bass = mod(c.bass + n); };
   song.lines.forEach(l => l.chords.forEach(sh));
   (song.custom || []).forEach(sh);
@@ -1603,7 +1618,7 @@ function openKeyPopover(anchor) {
       h('h5', {}, 'Tónina = nabídka akordů'),
       keyPicker(key, k => {
         pushUndo(song);
-        song.key = k; touch(song);
+        song.key = k; song.baseKey = null; touch(song);
         renderEditor();
         const pill = $('.key-pill');
         if (pill) { anchor = pill; draw(k); }
