@@ -542,6 +542,7 @@ let searchQ = '';
 function renderLibrary() {
   const app = $('#app');
   app.innerHTML = '';
+  document.body.classList.remove('playing');
   const shared = auth.mode === 'supabase';
   renderTopActions([
     canCreate() && h('button', { class: 'btn ghost', onclick: exportSongs, title: 'Stáhnout zálohu songů' }, '⬇ Záloha'),
@@ -584,47 +585,41 @@ function renderLibrary() {
     return;
   }
 
-  const grid = h('div', { class: 'grid' });
+  const grid = h('ul', { class: 'song-list' });
   const search = h('input', {
-    class: 'search', type: 'search', placeholder: 'Hledat song nebo interpreta…', value: searchQ,
+    id: 'songSearch', class: 'search', type: 'search', placeholder: 'Hledat song nebo interpreta…', value: searchQ,
     oninput: e => { searchQ = e.target.value; fillGrid(); },
   });
   wrap.append(h('div', { class: 'lib-tools' }, search), grid);
 
+  const cz = new Intl.Collator('cs', { sensitivity: 'base' });
   function fillGrid() {
     grid.innerHTML = '';
     const q = searchQ.trim().toLowerCase();
     const list = [...songs]
-      .sort((a, b) => (b.updated || 0) - (a.updated || 0))
+      .sort((a, b) => cz.compare(a.artist || '', b.artist || '') || cz.compare(a.title || '', b.title || ''))
       .filter(s => !q || (s.title + ' ' + (s.artist || '') + ' ' + (s.author || '')).toLowerCase().includes(q));
-    if (!list.length) grid.append(h('p', { style: 'color:var(--muted)' }, 'Nic nenalezeno.'));
-    list.forEach(s => {
-      const color = CARD_COLORS[mod(songs.indexOf(s)) % CARD_COLORS.length];
-      const secs = [...new Set(s.lines.map(l => l.section).filter(Boolean))];
-      const chordCount = s.lines.reduce((n, l) => n + l.chords.length, 0);
-      grid.append(h('article', {
-        class: 'card', style: `--card-c: var(${color})`, tabindex: 0,
-        onclick: () => go('#song-' + s.id),
-        onkeydown: e => { if (e.key === 'Enter') go('#song-' + s.id); },
-      },
-        canEdit(s) && h('button', {
-          class: 'del', title: 'Smazat song', 'aria-label': 'Smazat song',
-          onclick: e => {
-            e.stopPropagation();
-            const idx = songs.indexOf(s);
-            songs = songs.filter(x => x !== s);
-            saveSongs(); renderLibrary();
-            toast(`„${s.title}“ smazán`, 'Zpět', () => { songs.splice(Math.min(idx, songs.length), 0, s); saveSongs(); renderLibrary(); });
-          },
-        }, '×'),
-        h('h3', {}, s.title || 'Bez názvu'),
-        h('div', { class: 'artist' }, s.artist || '—'),
-        h('div', { class: 'meta' },
-          h('span', { class: 'badge key' }, keyPair(s.key)),
-          s.isPublic === false && h('span', { class: 'badge', title: 'Vidíš jen ty' }, '🔒'),
-          s.author && h('span', { class: 'badge author', title: 'Přidal(a)' }, s.author),
-          h('span', { class: 'badge' }, chordCount + ' akordů'),
-          h('span', { class: 'sec-dots' }, secs.map(t => h('i', { 'data-s': t, style: 'background:var(--sc)', title: secLabel(t) }))))));
+    if (!list.length) grid.append(h('li', { class: 'none' }, 'Nic nenalezeno.'));
+    list.forEach((s, i) => {
+      const color = CARD_COLORS[i % CARD_COLORS.length];
+      grid.append(h('li', { style: `--dot: var(${color})` },
+        h('a', { class: 'song-link', href: '#play-' + s.id },
+          h('span', { class: 'dot' }),
+          s.artist ? h('span', { class: 'sl-artist' }, s.artist) : null,
+          s.artist ? h('span', { class: 'sl-sep' }, ' – ') : null,
+          h('span', { class: 'sl-title' }, s.title || 'Bez názvu'),
+          s.isPublic === false ? h('span', { class: 'sl-lock', title: 'Vidíš jen ty' }, ' 🔒') : null),
+        canEdit(s) && h('span', { class: 'sl-actions' },
+          h('a', { class: 'sl-btn', href: '#song-' + s.id, title: 'Upravit' }, '✎'),
+          h('button', {
+            class: 'sl-btn', title: 'Smazat song', 'aria-label': 'Smazat song',
+            onclick: () => {
+              const idx = songs.indexOf(s);
+              songs = songs.filter(x => x !== s);
+              saveSongs(); renderLibrary();
+              toast(`„${s.title}“ smazán`, 'Zpět', () => { songs.splice(Math.min(idx, songs.length), 0, s); saveSongs(); renderLibrary(); });
+            },
+          }, '×'))));
     });
   }
   fillGrid();
@@ -1050,13 +1045,28 @@ function renderEditor() {
       ? (editable ? h('a', { class: 'btn primary', href: '#song-' + song.id }, '✎ Upravit') : null)
       : h('a', { class: 'btn rainbow', href: '#play-' + song.id }, '▶ Hrát'));
 
-  ed.append(h('div', { class: 'song-head' },
-    h('div', { class: 'titles' }, titleIn, artistIn,
-      song.author && auth.mode === 'supabase' ? h('div', { class: 'by' }, 'přidal(a) ', h('b', {}, song.author)) : null),
-    controls));
+  document.body.classList.toggle('playing', play);
+  if (play) {
+    // režim hraní: jedna tenká lišta, ať je co nejvíc místa na text
+    controls.prepend(h('button', {
+      class: 'tbtn' + (settings.cols !== false ? ' on' : ''), title: 'Text do sloupců / jeden sloupec',
+      onclick: () => { settings.cols = settings.cols === false; saveSettings(); renderEditor(); },
+    }, settings.cols !== false ? '▥ Sloupce' : '▯ 1 sloupec'));
+    ed.append(h('div', { class: 'play-bar' },
+      h('a', { class: 'pb-back', href: '#', title: 'Zpět na seznam' }, '←'),
+      h('div', { class: 'pb-name', title: (song.artist ? song.artist + ' – ' : '') + song.title },
+        song.artist ? h('span', { class: 'pb-artist' }, song.artist + ' – ') : null,
+        h('b', {}, song.title || 'Bez názvu')),
+      controls));
+  } else {
+    ed.append(h('div', { class: 'song-head' },
+      h('div', { class: 'titles' }, titleIn, artistIn,
+        song.author && auth.mode === 'supabase' ? h('div', { class: 'by' }, 'přidal(a) ', h('b', {}, song.author)) : null),
+      controls));
+  }
 
   if (!play) ed.append(renderPalette(song));
-  const sheet = h('div', { class: 'sheet', id: 'sheet' });
+  const sheet = h('div', { class: 'sheet' + (play && settings.cols !== false ? ' cols' : ''), id: 'sheet' });
   ed.append(h('div', { class: 'sheet-wrap' }, sheet));
   app.append(ed);
   renderSheet();
@@ -1119,8 +1129,14 @@ function renderSheet() {
     }, '+ řádek na začátek (třeba intro)'));
   }
 
+  // při hraní je každá část v bloku (ve sloupcích se nerozdělí); štítek části je vpravo u prvního řádku
+  let block = play ? null : sheet;
+  let markFirst = false;
+  let markShort = false;
+  const newBlock = () => { block = h('div', { class: 'sec-block' }); sheet.append(block); };
   song.lines.forEach((line, li) => {
     if (line.section) {
+      if (play) newBlock();
       sec = line.section;
       counts[sec] = (counts[sec] || 0) + 1;
       const total = song.lines.filter(l => l.section === sec).length;
@@ -1132,10 +1148,15 @@ function renderSheet() {
           onClick: () => openSectionPopover(lab, li),
         }));
       }
-      sheet.append(h('div', {}, lab));
+      block.append(h('div', { class: 'sec-head' }, lab));
+      markFirst = true;
+      // krátká část (1 řádek) potřebuje víc výšky, ať se do ní svislý štítek vejde
+      const next = song.lines.findIndex((l, j) => j > li && l.section);
+      markShort = (next < 0 ? song.lines.length : next) - li <= 1;
     }
+    if (!block) newBlock();
     const empty = !line.text && !line.chords.length;
-    if (play && empty) { sheet.append(h('div', { class: 'gap' })); return; }
+    if (play && empty) { block.append(h('div', { class: 'gap' })); return; }
 
     const maxPos = line.chords.reduce((m, c) => Math.max(m, c.pos + 1), 0);
     let len = Math.max(line.text.length, maxPos);
@@ -1143,7 +1164,7 @@ function renderSheet() {
     else if (!line.text) len = Math.max(len, 1);
 
     const lineEl = h('div', {
-      class: 'line' + (empty ? ' empty-line' : '') + (!line.text ? ' instr' : ''),
+      class: 'line' + (empty ? ' empty-line' : '') + (!line.text ? ' instr' : '') + (markFirst ? ' sec-first' : '') + (markFirst && markShort ? ' sec-short' : '') + (line.chords.length ? ' has-chords' : ''),
       'data-li': li, 'data-s': sec || null,
     });
     const byPos = new Map(line.chords.map(c => [c.pos, c]));
@@ -1178,7 +1199,8 @@ function renderSheet() {
         h('button', { title: 'Vložit prázdný řádek pod (třeba pro intro/mezihru)', onclick: () => insertLine(li + 1) }, '+'),
         h('button', { title: 'Smazat řádek', onclick: () => deleteLine(li) }, '×')));
     }
-    sheet.append(lineEl);
+    block.append(lineEl);
+    markFirst = false;
   });
 
   if (!play) {

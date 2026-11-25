@@ -499,3 +499,100 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .c.caret { box-shadow: inset 2px 0 0 var(--d0); animation: caret-blink 1s steps(1) infinite; }
 @keyframes caret-blink { 50% { box-shadow: inset 2px 0 0 transparent; } }
 .edit .sheet { user-select: none; }
+
+/* =========================================================
+   Jednoduchý seznam písniček
+   ========================================================= */
+.song-list { list-style: none; margin: 0; padding: 0; max-width: 760px; }
+.song-list li { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--line); }
+.song-list li.none { color: var(--muted); padding: 14px 4px; border: none; }
+.song-link {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 0; padding: 12px 6px;
+  text-decoration: none; font-size: 17px; border-radius: 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.song-link:hover { background: var(--surface); }
+.song-link .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--dot); flex: none; margin-right: 12px; align-self: center; }
+.sl-artist { color: var(--muted); }
+.sl-sep { color: var(--muted); white-space: pre; }
+.sl-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.sl-actions { display: flex; gap: 2px; opacity: 0; transition: opacity .12s ease; }
+.song-list li:hover .sl-actions, .song-list li:focus-within .sl-actions { opacity: 1; }
+.sl-btn {
+  border: none; background: transparent; color: var(--muted); cursor: pointer; text-decoration: none;
+  width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; font-size: 16px;
+}
+.sl-btn:hover { background: var(--surface-2); color: var(--ink); }
+@media (hover: none) { .sl-actions { opacity: .6; } }
+.hero h1 { font-size: clamp(30px, 5vw, 44px); }
+
+/* =========================================================
+   Režim hraní: co nejvíc místa na text
+   ========================================================= */
+body.playing .topbar { display: none; }
+.editor.play { max-width: none; padding-top: 6px; gap: 6px; }
+.play-bar {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap;
+  padding: 4px 0 8px; border-bottom: 1px solid var(--line);
+}
+.pb-back {
+  text-decoration: none; font-size: 20px; font-weight: 700; width: 34px; height: 34px; border-radius: 10px;
+  display: grid; place-items: center; background: var(--surface-2); flex: none;
+}
+.pb-back:hover { background: var(--line); }
+.pb-name { flex: 1 1 220px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 17px; }
+.pb-artist { color: var(--muted); }
+.play-bar .controls { gap: 6px; }
+.play-bar .key-pill { padding: 5px 12px; font-size: 14px; }
+.play-bar .tgroup button { padding: 5px 10px; }
+.play-bar .btn { padding: 5px 12px; font-size: 14px; }
+.play-bar .tgroup span { min-width: 0; }
+.tbtn {
+  border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px;
+  cursor: pointer; font-weight: 600; font-size: 14px;
+}
+.tbtn:hover { border-color: var(--ink); }
+.play .sheet-wrap { padding: 0 0 40vh; }
+.play .line { line-height: 2.7; min-height: 2.7em; }
+.play .gap { height: .6em; }
+.play .sec-block { margin-bottom: .5em; }
+.sheet.cols { column-width: 21em; column-gap: 36px; column-rule: 1px solid var(--line); }
+.sheet.cols .sec-block { break-inside: avoid; }
+
+/* =========================================================
+   Štítky částí vpravo, barevný pruh vpravo
+   ========================================================= */
+.sec-head { position: relative; height: 0; }
+.sec-label {
+  position: absolute; right: 0; top: .3em; z-index: 3; margin: 0;
+  border-radius: 8px 0 0 8px;
+}
+.line { border-left: none; border-right: 4px solid transparent; }
+.line[data-s] { border-right-color: var(--sc); }
+.line.sec-first { padding-right: 7.5em; }
+.line.sec-first .line-tools { top: auto; bottom: 2px; transform: none; }
+.sheet > .sec-head:first-child + .line, .sec-block:first-child { margin-top: 0; }
+
+/* =========================================================
+   Těsnější řádky
+   ========================================================= */
+.edit .line { line-height: 2.8; min-height: 2.8em; }
+.play .line { line-height: 1.75; min-height: 1.75em; }
+.play .line.has-chords { line-height: 2.45; min-height: 2.45em; }
+.play .chord { font-size: .66em; padding: .18em .45em; }
+.play .gap { height: .45em; }
+
+/* štítky částí svisle v pravém okraji u barevného pruhu – nezabírají místo textu */
+.sec-label {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  top: 0; right: 0; padding: 8px 3px; font-size: 11px; letter-spacing: .08em;
+  border-radius: 0 7px 7px 0;
+}
+.edit .line, .edit .line.sec-first { padding-right: 60px; }
+.play .line, .play .line.sec-first { padding-right: 26px; }
+.line-tools, .line.sec-first .line-tools { right: 26px; top: 50%; bottom: auto; transform: translateY(-50%); }
+.line.sec-short { min-height: 4.4em; }
+@media (max-width: 860px) { .edit .line, .edit .line.sec-first { padding-right: 60px; } }
+.line.instr { white-space: nowrap; }
+.play .sec-block { padding-top: .4em; }
+.play .line.instr .c.pad { width: .42em; }
