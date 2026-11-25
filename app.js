@@ -508,6 +508,7 @@ function render() {
   route = parseHash();
   if (route.view !== 'along' && typeof alongStop === 'function') alongStop();
   if (prevView !== route.view) window.scrollTo(0, 0);
+  if (route.id !== historyFor || route.mode === 'edit') viewShift = 0;   // transpozice se nikdy nepřenáší
   if (route.id !== historyFor) { undoStack = []; redoStack = []; historyFor = route.id || null; selection = null; caret = null; expandedRefs = new Set(); }
   if ((route.view === 'song' || route.view === 'along') && !current()) {
     if (auth.loading) { $('#app').innerHTML = '<div class="wrap"><div class="empty"><div class="big-emoji">🎸</div><h2>Načítám song…</h2></div></div>'; return; }
@@ -1021,13 +1022,13 @@ function renderEditor() {
       onclick: () => { if (play) return; pushUndo(song); song.capo = 0; touch(song); renderEditor(); toast('Kapodastr odebrán', 'Zpět', undo); },
     }, `Kapo ${song.capo}`) : null,
     !play && h('button', { class: 'btn', onclick: () => openAudioModal(song), title: 'Poznat tóninu z MP3 nebo YouTube' }, '🎧 Z nahrávky'),
-    h('div', { class: 'tgroup', title: 'Transpozice – posune všechny akordy' },
+    play && h('div', { class: 'tgroup', title: 'Transpozice – jen pro zobrazení, písnička se nemění' },
       h('button', { onclick: () => transpose(-1), 'aria-label': 'Transponovat dolů' }, '−'),
       h('button', {
-        class: 'tr-val' + (transOffset(song) ? ' moved' : ''),
-        title: transOffset(song) ? 'Posunuto oproti původní tónině – klik vrátí původní' : 'Původní tónina',
-        onclick: () => { const d = transOffset(song); if (d) transpose(-d); },
-      }, transLabel(song)),
+        class: 'tr-val' + (viewShift ? ' moved' : ''),
+        title: viewShift ? 'Posunuto jen pro tebe – klik vrátí originál' : 'Originální tónina',
+        onclick: () => { if (viewShift) transpose(-viewShift); },
+      }, stepLabel(viewShift)),
       h('button', { onclick: () => transpose(1), 'aria-label': 'Transponovat nahoru' }, '+')),
     play && h('div', { class: 'tgroup', title: 'Velikost písma' },
       h('button', { onclick: () => setFont(-1) }, 'A−'),
@@ -1079,7 +1080,7 @@ function renderEditor() {
       h('div', { class: 'pb-name', title: (song.artist ? song.artist + ' – ' : '') + song.title },
         song.artist ? h('span', { class: 'pb-artist' }, song.artist + ' – ') : null,
         h('b', {}, song.title || 'Bez názvu'),
-        h('span', { class: 'pb-key' }, ' · ' + keyName(song.key) + ' / ' + keyShort(relKey(song.key)))),
+        h('span', { class: 'pb-key' }, ' · ' + keyName(viewSong(song).key) + ' / ' + keyShort(relKey(viewSong(song).key)))),
       controls));
   } else {
     ed.append(h('div', { class: 'song-head' },
@@ -1215,10 +1216,11 @@ function compactPlan(song, single) {
 }
 
 function renderSheet() {
-  const song = current();
+  const real = current();
   const sheet = $('#sheet');
-  if (!song || !sheet) return;
-  const play = isPlay(song);
+  if (!real || !sheet) return;
+  const play = isPlay(real);
+  const song = play ? viewSong(real) : real;   // při hraní případný posun pro zobrazení
   sheet.innerHTML = '';
   let sec = null;
   const counts = {};
@@ -1462,25 +1464,31 @@ function deleteLine(li) {
   toast('Řádek smazán', 'Zpět', undo);
 }
 /** o kolik půltónů je song posunutý oproti původní tónině (−5 … +6) */
-function transOffset(song) {
-  if (!song.baseKey) return 0;
-  let d = mod(song.key.root - song.baseKey.root);
-  if (d > 6) d -= 12;
-  return d;
-}
-const transLabel = song => { const d = transOffset(song); return d > 0 ? '+' + d : d < 0 ? '−' + (-d) : '0'; };
 
+/* Transpozice je jen pro zobrazení: nic se neukládá a po obnovení stránky / jiné písničce je zase originál.
+   (Vlastní upravené verze přijdou s osobními zpěvníky.) */
+let viewShift = 0;
 function transpose(n) {
-  const song = current();
-  pushUndo(song);
-  if (!song.baseKey) song.baseKey = clone(song.key);   // zapamatuj původní tóninu
-  const sh = c => { c.root = mod(c.root + n); if (c.bass != null) c.bass = mod(c.bass + n); };
-  song.lines.forEach(l => l.chords.forEach(sh));
-  (song.custom || []).forEach(sh);
-  song.key.root = mod(song.key.root + n);
-  if (armed) sh(armed);
-  touch(song);
-  renderEditor();
+  viewShift += n;
+  if (viewShift > 11 || viewShift < -11) viewShift %= 12;
+  if (route.view === 'along' && typeof alongShiftChanged === 'function') alongShiftChanged();
+  else renderEditor();
+}
+const viewCache = new WeakMap();
+/** písnička tak, jak se má zobrazit (s posunem pro zobrazení) – NEUKLÁDAT, jen číst */
+function viewSong(song) {
+  if (!song || !viewShift) return song;
+  const c = viewCache.get(song);
+  if (c && c.shift === viewShift && c.lines === song.lines && c.updated === song.updated) return c.v;
+  const sh = ch => ({ ...ch, root: mod(ch.root + viewShift), bass: ch.bass == null ? ch.bass : mod(ch.bass + viewShift) });
+  const v = {
+    ...song,
+    key: { ...song.key, root: mod(song.key.root + viewShift) },
+    lines: song.lines.map(l => ({ ...l, chords: l.chords.map(sh) })),
+    custom: (song.custom || []).map(sh),
+  };
+  viewCache.set(song, { shift: viewShift, lines: song.lines, updated: song.updated, v });
+  return v;
 }
 const FONT_DEFAULT = 19;
 const fontStep = () => Math.round((settings.fontSize - FONT_DEFAULT) / 2);

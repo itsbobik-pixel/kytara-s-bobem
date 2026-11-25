@@ -75,12 +75,14 @@ function buildModel(song, sync) {
   return { lines, chords };
 }
 
-const alSong = () => current();
+const alSong = () => viewSong(current());   // zobrazení (s případnou transpozicí), neukládat
 function rebuild() { AL.model = buildModel(alSong(), AL.sync); }
+/** transpozice pro zobrazení se změnila */
+function alongShiftChanged() { if (AL.sync) rebuild(); renderAlongBody(); }
 
 /** uloží změnu časů (jen kdo smí song upravit) */
 function commitSync() {
-  const song = alSong();
+  const song = current();
   rebuild();
   if (!canEdit(song)) return;
   song.sync = clone(AL.sync);
@@ -390,6 +392,10 @@ function renderAlongBody() {
         disabled: !ready, 'aria-label': 'Posun v písničce',
         oninput: e => alSeek(+e.target.value),
       }),
+      h('div', { class: 'tgroup', title: 'Transpozice – jen pro zobrazení, písnička se nemění' },
+        h('button', { onclick: () => transpose(-1), 'aria-label': 'Transponovat dolů' }, '−'),
+        h('button', { class: 'tr-val' + (viewShift ? ' moved' : ''), onclick: () => { if (viewShift) transpose(-viewShift); }, title: 'Klik vrátí originál' }, stepLabel(viewShift)),
+        h('button', { onclick: () => transpose(1), 'aria-label': 'Transponovat nahoru' }, '+')),
       AL.hasStems && AL.sync?.yt ? h('button', {
         class: 'tbtn', title: 'Přepnout, odkud hraje hudba. YouTube = tak, jak to slyší ostatní.',
         onclick: () => alSwitchSource(AL.engine === 'yt' ? 'wa' : 'yt'),
