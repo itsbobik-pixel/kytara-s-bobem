@@ -35,7 +35,9 @@ function persist(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* storage nedostupné */ }
 }
 let songs = load(LS_SONGS, []);
-const settings = Object.assign({ notation: 'cz', fontSize: 19 }, load(LS_SETTINGS, {}));
+const settings = Object.assign({ notation: 'intl', fontSize: 19 }, load(LS_SETTINGS, {}));
+// v2: výchozí značení je mezinárodní (A#, B) – jednorázově přepni i dřív uložené nastavení
+if (settings.nv !== 2) { settings.notation = 'intl'; settings.nv = 2; persist(LS_SETTINGS, settings); }
 const saveSettings = () => persist(LS_SETTINGS, settings);
 function saveSongs() {
   if (auth.mode === 'supabase') { window.KSB_SUPA.schedule(); return; }
@@ -223,7 +225,8 @@ const isRecommended = key => (key.minor ? RECOMMENDED.minor : RECOMMENDED.major)
 function parseNote(s) {
   const m = /^([A-H])(#|♯|b|♭|is|es|s(?!us))?/.exec(s);
   if (!m) return null;
-  const L = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, H: 11, B: settings.notation === 'cz' ? 10 : 11 };
+  const czB = czParse ?? settings.notation === 'cz';   // v českém zápisu je B = A#
+  const L = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, H: 11, B: czB ? 10 : 11 };
   let semi = L[m[1]];
   const acc = m[2];
   if (acc === '#' || acc === '♯' || acc === 'is') semi += 1;
@@ -338,7 +341,20 @@ function normalizeChords(chords) {
   return out;
 }
 
+// Když vložený text obsahuje akord H (český zápis), čteme v něm B jako A#.
+let czParse = null;
+const CZ_H_CHORD = /(^|[\s\[(|])H(is|#)?(m|mi|moll|7|maj7|sus2|sus4|dim|add9|6|9)?(\/[A-H][#b]?)?(?=[\s\])|,]|$)/m;
 function parseLyrics(raw) {
+  const parseAs = cz => { czParse = cz; try { return parseLyricsInner(raw); } finally { czParse = null; } };
+  if (CZ_H_CHORD.test(raw)) return parseAs(true);
+  // bez H nevíme, jestli B znamená B, nebo české B (= A#) → vyber čtení, které lépe sedí do tóniny
+  const intl = parseAs(false);
+  if (!intl.some(l => l.chords.some(c => c.root === 11 || c.bass === 11))) return intl;
+  const cz = parseAs(true);
+  return keyFit(cz) > keyFit(intl) ? cz : intl;
+}
+const keyFit = lines => guessKeyScored(lines)?.s ?? 0;
+function parseLyricsInner(raw) {
   const src = raw.replace(/\r/g, '').replace(/\t/g, '    ').split('\n');
   const out = [];
   let pendingSection = null;
@@ -386,7 +402,8 @@ function parseLyrics(raw) {
   return res;
 }
 
-function guessKey(lines) {
+function guessKey(lines) { return guessKeyScored(lines)?.key || null; }
+function guessKeyScored(lines) {
   const chords = lines.flatMap(l => l.chords);
   if (!chords.length) return null;
   let best = null;
@@ -408,7 +425,7 @@ function guessKey(lines) {
       if (!best || s > best.s) best = { key, s };
     }
   }
-  return best.key;
+  return best;
 }
 
 function songToText(song) {
