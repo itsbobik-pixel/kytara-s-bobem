@@ -1030,9 +1030,9 @@ function renderEditor() {
       }, stepLabel(fontStep())),
       h('button', { onclick: () => setFont(1) }, 'A+')),
     play && h('div', { class: 'tgroup', title: 'Automatické posouvání' },
-      h('button', { class: autoscroll.on ? 'on' : '', id: 'asBtn', onclick: toggleAutoscroll }, autoscroll.on ? '⏸' : '⏬'),
+      h('button', { class: autoscroll.on ? 'on' : '', id: 'asBtn', onclick: toggleAutoscroll }, autoscroll.on ? '❚❚ Stop' : '▶ Posouvat'),
       h('button', { onclick: () => setSpeed(-1) }, '−'),
-      h('span', { id: 'asSpeed' }, 'rychlost ' + autoscroll.speed),
+      h('span', { id: 'asSpeed', title: 'Rychlost posouvání' }, autoscroll.speed),
       h('button', { onclick: () => setSpeed(1) }, '+')),
     !play && h('div', { class: 'tgroup history', title: 'Historie úprav' },
       h('button', { id: 'undoBtn', onclick: undo, title: 'Zpět (Ctrl+Z)', disabled: !undoStack.length }, '↶ Zpět'),
@@ -1060,7 +1060,7 @@ function renderEditor() {
     controls.prepend(h('button', {
       class: 'tbtn' + (settings.cols !== false ? ' on' : ''), title: 'Text do sloupců / jeden sloupec',
       onclick: () => { settings.cols = settings.cols === false; saveSettings(); renderEditor(); },
-    }, settings.cols !== false ? '▥ Sloupce' : '▯ 1 sloupec'));
+    }, settings.cols !== false ? 'Sloupce' : '1 sloupec'));
     ed.append(h('div', { class: 'play-bar' },
       h('a', { class: 'pb-back', href: '#', title: 'Zpět na seznam' }, '←'),
       h('div', { class: 'pb-name', title: (song.artist ? song.artist + ' – ' : '') + song.title },
@@ -1369,7 +1369,7 @@ async function copyText() {
 function toggleAutoscroll() {
   autoscroll.on ? stopAutoscroll() : startAutoscroll();
   const b = $('#asBtn');
-  if (b) { b.textContent = autoscroll.on ? '⏸' : '⏬'; b.classList.toggle('on', autoscroll.on); }
+  if (b) { b.textContent = autoscroll.on ? '❚❚ Stop' : '▶ Posouvat'; b.classList.toggle('on', autoscroll.on); }
 }
 function startAutoscroll() {
   autoscroll.on = true; autoscroll.last = performance.now(); autoscroll.acc = 0;
@@ -1385,7 +1385,7 @@ function startAutoscroll() {
 function stopAutoscroll() { autoscroll.on = false; cancelAnimationFrame(autoscroll.raf); }
 function setSpeed(d) {
   autoscroll.speed = Math.min(10, Math.max(1, autoscroll.speed + d));
-  const s = $('#asSpeed'); if (s) s.textContent = 'rychlost ' + autoscroll.speed;
+  const s = $('#asSpeed'); if (s) s.textContent = autoscroll.speed;
 }
 
 // =========================================================
