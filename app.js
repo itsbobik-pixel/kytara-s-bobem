@@ -296,6 +296,7 @@ const SECTIONS = [
   { type: 'pre',    label: 'Předrefrén' },
   { type: 'chorus', label: 'Refrén' },
   { type: 'bridge', label: 'Bridge' },
+  { type: 'inter',  label: 'Mezihra' },
   { type: 'solo',   label: 'Sólo' },
   { type: 'outro',  label: 'Outro' },
 ];
@@ -305,7 +306,8 @@ const SEC_WORDS = [
   [/^(sloka|verse|verš|vers|s|v)$/i, 'verse'],
   [/^(předrefrén|predrefren|prerefrén|prerefren|pre-?chorus|pre)$/i, 'pre'],
   [/^(refrén|refren|ref|r|chorus)$/i, 'chorus'],
-  [/^(bridge|most|mezihra)$/i, 'bridge'],
+  [/^(bridge|most)$/i, 'bridge'],
+  [/^(mezihra|interlude|instrumental|instr)$/i, 'inter'],
   [/^(sólo|solo)$/i, 'solo'],
   [/^(outro|dohra|závěr|zaver|coda|konec)$/i, 'outro'],
 ];

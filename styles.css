@@ -25,6 +25,7 @@
   --s-chorus: #FF5A5F;
   --s-bridge: #7BC74D;
   --s-solo: #FF8A3D;
+  --s-inter: #B07CFF;
   --s-outro: #14B8A6;
 
   --fs: 19px;
@@ -246,6 +247,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 [data-s="pre"]    { --sc: var(--s-pre); }
 [data-s="chorus"] { --sc: var(--s-chorus); }
 [data-s="bridge"] { --sc: var(--s-bridge); }
+[data-s="inter"]  { --sc: var(--s-inter); }
 [data-s="solo"]   { --sc: var(--s-solo); }
 [data-s="outro"]  { --sc: var(--s-outro); }
 .chip.sec { --chip-bg: var(--sc); --chip-ink: #fff; }
