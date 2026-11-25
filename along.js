@@ -417,6 +417,10 @@ function renderAlongBody() {
         class: 'tbtn' + (AL.edit ? ' on' : ''), title: 'Doladit časy tažením na časové ose',
         onclick: () => { AL.edit = !AL.edit; AL.view0 = Math.max(0, alNow() - AL.span * 0.25); renderAlongBody(); },
       }, '✎ Doladit') : null,
+      editable && AL.sync ? h('a', {
+        class: 'tbtn', href: (location.port === '5174' ? '' : 'http://127.0.0.1:5174/') + 'video.html#' + song.id, target: '_blank',
+        title: 'Lyrics / play-along video (MP4 s vokálem i bez) – potřebuje pomocníka',
+      }, '🎬 Video') : null,
       AL.edit ? h('button', { id: 'alUndo', class: 'tbtn', onclick: alUndo, disabled: !AL.undo.length, title: 'Vrátit poslední posun (Ctrl+Z)' }, '↶ Zpět') : null));
 
   const ed = h('div', { class: 'editor play along' + (AL.edit ? ' al-editing' : '') }, bar);

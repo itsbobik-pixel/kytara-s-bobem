@@ -14,6 +14,7 @@ import json
 import mimetypes
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import urllib.parse
@@ -37,6 +38,9 @@ ALLOWED_ORIGINS = re.compile(
 STEMS_DIR = ROOT / "helper" / "tmp" / "stems"
 STEM_FILES = ("vocals.mp3", "no_vocals.mp3", "sync.json")
 STEM_PATH = re.compile(r"^/stems/([A-Za-z0-9]{4,40})/(|vocals\.mp3|no_vocals\.mp3|sync\.json)$")
+# video (video.html): syrový H.264 z prohlížeče → helper/tmp/video/<id>/, ffmpeg přidá zvuk
+VIDEO_DIR = ROOT / "helper" / "tmp" / "video"
+VIDEO_PATH = re.compile(r"^/video/([A-Za-z0-9]{4,40})/(chunk|finish)$")
 YT_URL = re.compile(r"^https://(www\.|m\.|music\.)?(youtube\.com/(watch\?|shorts/|live/)|youtu\.be/)[\w\-?=&%./]+$", re.I)
 
 
@@ -88,7 +92,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_response(403); self.end_headers(); return
         self.send_response(204)
         self._cors()
-        self.send_header("Access-Control-Allow-Methods", "GET")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST")
         self.send_header("Access-Control-Allow-Headers", "*")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.end_headers()
@@ -122,6 +126,65 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        m = VIDEO_PATH.match(parsed.path)
+        if not m or not self._origin_ok():
+            self._json(404, {"error": "Neznámá adresa."}); return
+        vid, action = m.group(1), m.group(2)
+        q = urllib.parse.parse_qs(parsed.query)
+        size = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(size) if size else b""
+        folder = VIDEO_DIR / vid
+        folder.mkdir(parents=True, exist_ok=True)
+        raw = folder / "video.h264"
+        if action == "chunk":
+            n = q.get("n", ["0"])[0]
+            if n == "reset":
+                raw.write_bytes(b"")
+            else:
+                with raw.open("ab") as f:
+                    f.write(body)
+            self._json(200, {"ok": True, "bytes": raw.stat().st_size})
+            return
+        # finish: spojit se zvukem – s vokálem (vokál + doprovod) a karaoke (jen doprovod)
+        try:
+            fps = int(q.get("fps", ["30"])[0])
+            pre_ms = int(float(q.get("pre", ["0"])[0]) * 1000)
+            name = re.sub(r"[^A-Za-z0-9_-]+", "-", q.get("name", ["video"])[0])[:80] or "video"
+            stems = STEMS_DIR / vid
+            voc, inst = stems / "vocals.mp3", stems / "no_vocals.mp3"
+            if not inst.is_file():
+                self._json(400, {"error": "Chybí stopy (no_vocals.mp3) v helper/tmp/stems/" + vid}); return
+            versions = [(f"{name}-karaoke.mp4", ["-i", str(inst)], f"[1:a]adelay={pre_ms}:all=1,apad[a]")]
+            if voc.is_file():
+                versions.insert(0, (f"{name}-s-vokalem.mp4", ["-i", str(voc), "-i", str(inst)],
+                                    f"[1:a][2:a]amix=inputs=2:normalize=0,adelay={pre_ms}:all=1,apad[a]"))
+            # 1) syrový H.264 → MP4 s časovými značkami (jinak ffmpeg zvuk zahodí)
+            vmp4 = folder / "video-only.mp4"
+            r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-f", "h264", "-i", str(raw),
+                                "-c", "copy", str(vmp4)], capture_output=True, text=True)
+            if r.returncode != 0:
+                raise RuntimeError(r.stderr.strip()[-400:] or "ffmpeg selhal")
+            dur = q.get("dur", [""])[0]
+            done = []
+            for out, inputs, filt in versions:
+                cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(vmp4),
+                       *inputs, "-filter_complex", filt, "-map", "0:v", "-map", "[a]",
+                       "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                       *(["-t", str(float(dur))] if dur else ["-shortest"]), "-movflags", "+faststart", str(folder / out)]
+                print("🎬 ", out)
+                r = subprocess.run(cmd, capture_output=True, text=True)
+                if r.returncode != 0:
+                    raise RuntimeError(r.stderr.strip()[-400:] or "ffmpeg selhal")
+                done.append(out)
+            raw.unlink(missing_ok=True)
+            vmp4.unlink(missing_ok=True)
+            self._json(200, {"ok": True, "files": done, "dir": str(folder)})
+        except Exception as e:  # noqa: BLE001
+            print(f"✗  {e}")
+            self._json(500, {"error": str(e)})
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)

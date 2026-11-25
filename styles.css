@@ -554,6 +554,7 @@ body.playing .topbar { display: none; }
   cursor: pointer; font-weight: 600; font-size: 14px;
 }
 .tbtn:hover { border-color: var(--ink); }
+a.tbtn { text-decoration: none; color: inherit; display: inline-flex; align-items: center; }
 .play .sheet-wrap { padding: 0 0 40vh; }
 .play .line { line-height: 2.7; min-height: 2.7em; }
 .play .gap { height: .6em; }

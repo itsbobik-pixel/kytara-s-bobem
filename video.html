@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>playalong.cz – video</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0b0914; color: #F4F1FA; font-family: Outfit, system-ui, sans-serif; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+    .stage { position: relative; background: #000; border-radius: 14px; overflow: hidden; display: grid; place-items: center; }
+    canvas { display: block; width: 100%; height: auto; max-height: 78vh; object-fit: contain; }
+    .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, select { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 8px 14px; background: #26223A; color: inherit; cursor: pointer; }
+    button.primary { background: linear-gradient(90deg, #FF5A5F, #FF6FB5, #8B5CF6); color: #fff; }
+    button:disabled { opacity: .45; cursor: default; }
+    input[type=range] { flex: 1; min-width: 160px; accent-color: #FF5A5F; }
+    .time { font-variant-numeric: tabular-nums; min-width: 96px; }
+    .msg { color: #B9B4CC; font-size: 14px; min-height: 1.2em; }
+    .msg b { color: #fff; }
+    .prog { height: 8px; background: #26223A; border-radius: 9px; overflow: hidden; }
+    .prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #FF5A5F, #FFB020); }
+    label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+    a { color: #FF8FBF; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="bar">
+      <a href="./">← zpěvník</a>
+      <b id="name" style="margin-left:8px">Načítám…</b>
+    </div>
+    <div class="stage"><canvas id="cv" width="1920" height="1080"></canvas></div>
+    <div class="bar">
+      <button id="play" class="primary" disabled>▶</button>
+      <span id="time" class="time">0:00 / 0:00</span>
+      <input id="seek" type="range" min="0" max="1" step="0.01" value="0">
+      <label title="Hlasitost zpěvu v náhledu">🎤 <input id="voc" type="range" min="0" max="1" step="0.05" value="1" style="min-width:90px;flex:0"></label>
+      <select id="fmt" title="Formát videa">
+        <option value="land">16:9 (1920×1080)</option>
+        <option value="vert">9:16 (1080×1920, Shorts/Reels)</option>
+      </select>
+      <button id="export" title="Vyrenderuje MP4 s vokálem i bez (karaoke). Potřebuje běžícího pomocníka.">🎬 Export MP4</button>
+    </div>
+    <div class="prog" id="prog" hidden><i></i></div>
+    <div class="msg" id="msg"></div>
+  </div>
+  <script src="config.js?v=76"></script>
+  <script src="video.js?v=76"></script>
+</body>
+</html>
