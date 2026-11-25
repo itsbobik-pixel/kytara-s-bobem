@@ -786,3 +786,5 @@ body.al-editing .al-yt { bottom: 236px; }
 .line.instr .chord { position: relative; left: 0; bottom: auto; display: inline-block; vertical-align: middle; margin-right: .3em; }
 .edit .line.instr .c.pad:not(:has(.chord)) { width: .8em; }
 .line.instr { white-space: normal; }
+.al-sec-btn { border: none; cursor: pointer; font: inherit; transition: transform .12s ease, filter .12s ease; }
+.al-sec-btn:hover { transform: translateY(-1px) scale(1.05); filter: brightness(1.08); }

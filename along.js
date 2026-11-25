@@ -137,6 +137,11 @@ function alPause() {
   updatePlayBtn();
 }
 function alToggle() { if (AL.playing) alPause(); else alPlay(); }
+/** skok na místo v písničce a hrát odtud (kousek předem, ať je slyšet nástup) */
+function alJump(t) {
+  alSeek(Math.max(0, t - 0.3));
+  if (!AL.playing && alReady()) alPlay();
+}
 function alSeek(t) {
   AL.offset = Math.max(0, Math.min(AL.dur, t));
   if (AL.engine === 'yt') {
@@ -467,7 +472,12 @@ function renderAlongSheet(sheet) {
       sec = line.section;
       counts[sec] = (counts[sec] || 0) + 1;
       const total = song.lines.filter(l => l.section === sec).length;
-      sheet.append(h('div', { class: 'al-sec' }, h('span', { class: 'sec-label', 'data-s': sec }, secLabel(sec) + (sec === 'verse' && total > 1 ? ' ' + counts[sec] : ''))));
+      // klik na štítek části = přehrát od začátku té části
+      const startL = AL.model.lines.slice(L.li).find(x => x.s != null);
+      sheet.append(h('div', { class: 'al-sec' }, h('button', {
+        class: 'sec-label al-sec-btn', 'data-s': sec, title: 'Přehrát od začátku této části',
+        onclick: () => { if (startL) alJump(startL.s); },
+      }, '▶ ' + secLabel(sec) + (sec === 'verse' && total > 1 ? ' ' + counts[sec] : ''))));
     }
     if (!line.text && !line.chords.length) { sheet.append(h('div', { class: 'gap' })); refs.lines[L.li] = null; return; }
     const el = h('div', { class: 'line al-line' + (line.chords.length ? ' has-chords' : '') + (!line.text ? ' instr' : ''), 'data-li': L.li, 'data-s': sec || null });
@@ -494,8 +504,11 @@ function renderAlongSheet(sheet) {
     el.addEventListener('click', e => {
       const c = e.target.closest('.c');
       const w = c && L.words.find(x => x.k === +c.dataset.w);
-      const t = w ? w.s : L.s;
-      if (t != null) alSeek(t - 0.3);
+      // u mezihry: klik na konkrétní akord = od toho akordu
+      const chEl = e.target.closest('.c');
+      const cc = !w && chEl && L.chords.find(x => x.pos === +chEl.dataset.i && x.t != null);
+      const t = w ? w.s : cc ? cc.t : L.s;
+      if (t != null) alJump(t);
     });
     sheet.append(el);
     refs.lines[L.li] = { el, chars, L };
