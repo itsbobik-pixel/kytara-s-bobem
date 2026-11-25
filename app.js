@@ -453,18 +453,37 @@ let autoscroll = { on: false, speed: 2, raf: 0, last: 0, acc: 0 };
 
 const current = () => songs.find(s => s.id === route.id);
 function touch(song) { song.updated = Date.now(); saveSongs(); }
+let redoStack = [];
+let historyFor = null;   // historie platí jen pro právě otevřený song
+const snapshot = song => ({ id: song.id, lines: clone(song.lines), key: clone(song.key), custom: clone(song.custom || []), capo: song.capo || 0 });
+function restore(song, s) { song.lines = s.lines; song.key = s.key; song.custom = s.custom; song.capo = s.capo || 0; }
 function pushUndo(song) {
-  undoStack.push({ id: song.id, lines: clone(song.lines), key: clone(song.key), custom: clone(song.custom || []), capo: song.capo || 0 });
-  if (undoStack.length > 60) undoStack.shift();
+  undoStack.push(snapshot(song));
+  if (undoStack.length > 100) undoStack.shift();
+  redoStack = [];        // nová změna zahodí kroky „vpřed“
 }
 function undo() {
   const u = undoStack.pop();
   const song = u && songs.find(s => s.id === u.id);
   if (!song) return;
-  song.lines = u.lines; song.key = u.key; song.custom = u.custom; song.capo = u.capo || 0;
+  redoStack.push(snapshot(song));
+  restore(song, u);
   touch(song);
   renderEditor();
-  toast('Vráceno zpět');
+}
+function redo() {
+  const r = redoStack.pop();
+  const song = r && songs.find(s => s.id === r.id);
+  if (!song) return;
+  undoStack.push(snapshot(song));
+  restore(song, r);
+  touch(song);
+  renderEditor();
+}
+function updateHistoryButtons() {
+  const u = $('#undoBtn'), r = $('#redoBtn');
+  if (u) u.disabled = !undoStack.length;
+  if (r) r.disabled = !redoStack.length;
 }
 
 // =========================================================
@@ -483,6 +502,7 @@ function render() {
   stopAutoscroll();
   armed = null;
   route = parseHash();
+  if (route.id !== historyFor) { undoStack = []; redoStack = []; historyFor = route.id || null; }
   if (route.view === 'song' && !current()) {
     if (auth.loading) { $('#app').innerHTML = '<div class="wrap"><div class="empty"><div class="big-emoji">🎸</div><h2>Načítám song…</h2></div></div>'; return; }
     go('#'); return;
@@ -1013,6 +1033,9 @@ function renderEditor() {
       h('button', { onclick: () => setSpeed(-1) }, '−'),
       h('span', { id: 'asSpeed' }, 'rychlost ' + autoscroll.speed),
       h('button', { onclick: () => setSpeed(1) }, '+')),
+    !play && h('div', { class: 'tgroup history', title: 'Historie úprav' },
+      h('button', { id: 'undoBtn', onclick: undo, title: 'Zpět (Ctrl+Z)', disabled: !undoStack.length }, '↶ Zpět'),
+      h('button', { id: 'redoBtn', onclick: redo, title: 'Vrátit (Ctrl+Y)', disabled: !redoStack.length }, 'Vrátit ↷')),
     !play && h('button', { class: 'btn', onclick: () => openSongModal(song) }, '✎ Text'),
     !play && h('button', { class: 'btn', onclick: copyText, title: 'Zkopírovat jako text s akordy' }, '⧉ Kopírovat'),
     !play && auth.mode === 'supabase' && h('button', {
@@ -1073,7 +1096,7 @@ function renderPalette(song) {
       h('button', { class: 'chip add', onclick: e => openChordBuilder(e.currentTarget) }, '+ akord'))),
     h('div', { class: 'tip' },
       h('b', {}, 'Přetáhni'), ' akord nad slabiku, nebo ho ', h('b', {}, 'klikni'), ' a pak klikej do textu. ',
-      'Klik na akord v textu = změna, odtažení pryč = smazání. ', h('b', {}, 'Ctrl+Z'), ' vrátí krok.'));
+      'Klik na akord v textu = změna, odtažení pryč = smazání. ', h('b', {}, 'Ctrl+Z'), ' = zpět, ', h('b', {}, 'Ctrl+Y'), ' = vrátit.'));
 }
 const sameChord = (a, b) => a.root === b.root && (a.q || '') === (b.q || '') && (a.bass ?? null) === (b.bass ?? null);
 
@@ -1165,6 +1188,7 @@ function renderSheet() {
       placeChord(+l.dataset.li, +c.dataset.i, armed);
     };
   }
+  updateHistoryButtons();
 }
 
 // ---------- mutace ----------
@@ -1551,9 +1575,10 @@ document.addEventListener('keydown', e => {
     if ($('#modalRoot').children.length) { closeModal(); return; }
     if (armed) { armed = null; renderEditor(); }
   }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing && route.view === 'song') {
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && !typing && route.view === 'song' && (k === 'z' || k === 'y')) {
     e.preventDefault();
-    undo();
+    if (k === 'y' || e.shiftKey) redo(); else undo();
   }
   if (e.key === ' ' && !typing && route.view === 'song' && route.mode === 'play') {
     e.preventDefault();
