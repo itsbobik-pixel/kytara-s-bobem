@@ -368,7 +368,8 @@ function renderAlong() {
   document.body.classList.add('playing');
   renderTopActions([h('a', { class: 'btn ghost', href: '#' }, '← Songy')]);
   if (AL.id !== song.id) { alongStop(); alLoad(song); return; }
-  if (!AL.sync && song.sync) { AL.sync = clone(song.sync); rebuild(); }
+  if (!AL.sync && song.sync) AL.sync = clone(song.sync);
+  if (AL.sync) rebuild();   // vždy znovu: song se mohl změnit v editoru, nebo se změnilo kapo / transpozice
   if (AL.engine === 'yt') { const box = $('#alYtBox'); if (box) box.hidden = false; }
   renderAlongBody();
 }
