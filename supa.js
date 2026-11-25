@@ -12,8 +12,10 @@ window.KSB_SUPA = (() => {
     auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true },
   });
 
-  const synced = new Map();   // id → JSON uloženého stavu (jen songy, které smím upravit)
+  const synced = new Map();   // id → JSON uloženého stavu (jen NAČTENÉ songy, které smím upravit)
   const inDb = new Set();     // id songů, které už v databázi existují
+  const editable = new Set(); // id songů v databázi, které smím upravit/smazat (i nenačtené)
+  const loading = new Map();  // id → probíhající načítání celé písničky
   let timer = 0, flushing = false, again = false;
 
   const payload = s => ({
@@ -22,7 +24,19 @@ window.KSB_SUPA = (() => {
     is_public: s.isPublic !== false,
     data: { key: s.key, baseKey: s.baseKey || null, capo: s.capo || 0, lines: s.lines, custom: s.custom || [], sync: s.sync || null },
   });
+  // Seznam stahuje jen názvy (šetří přenos dat); celá písnička se načte až při otevření.
+  // Nenačtená písnička má partial: true a NIKDY se neukládá (jinak by se v databázi přepsala prázdnou).
+  const META = 'id, owner, author_name, title, artist, is_public, updated_at';
+  const FULL = META + ', data';
+  const fromMeta = r => ({
+    id: r.id, title: r.title, artist: r.artist,
+    key: { root: 7, minor: false }, capo: 0, baseKey: null, lines: [], custom: [], sync: null,
+    updated: Date.parse(r.updated_at) || 0, serverUpdated: r.updated_at,
+    owner: r.owner, author: r.author_name || '', isPublic: r.is_public,
+    partial: true,
+  });
   const fromRow = r => ({
+    serverUpdated: r.updated_at,
     id: r.id,
     title: r.title,
     artist: r.artist,
@@ -40,18 +54,65 @@ window.KSB_SUPA = (() => {
 
   async function fetchSongs() {
     const { data, error } = await sb.from('songs')
-      .select('id, owner, author_name, title, artist, data, is_public, updated_at')
+      .select(META)
       .order('updated_at', { ascending: false })
-      .limit(1000);
+      .limit(5000);
     if (error) throw error;
-    return data.map(fromRow);
+    // co už mám celé načtené a v databázi se od té doby nezměnilo, si nechám
+    const prev = new Map(songs.map(s => [s.id, s]));
+    return data.map(r => {
+      const p = prev.get(r.id);
+      if (p && !p.partial && p.serverUpdated === r.updated_at) {
+        p.title = r.title; p.artist = r.artist; p.owner = r.owner; p.author = r.author_name || ''; p.isPublic = r.is_public;
+        return p;
+      }
+      return fromMeta(r);
+    });
   }
 
   function rememberSynced(list) {
-    synced.clear(); inDb.clear();
+    synced.clear(); inDb.clear(); editable.clear();
     for (const s of list) {
       inDb.add(s.id);
-      if (canEdit(s)) synced.set(s.id, JSON.stringify(payload(s)));
+      if (canEdit(s)) {
+        editable.add(s.id);
+        if (!s.partial) synced.set(s.id, JSON.stringify(payload(s)));
+      }
+    }
+  }
+
+  /** načte celou písničku (text, akordy, časy), pokud ještě není */
+  function ensureLoaded(id) {
+    const s = songs.find(x => x.id === id);
+    if (!s || !s.partial) return Promise.resolve(s);
+    if (loading.has(id)) return loading.get(id);
+    const pr = (async () => {
+      const { data, error } = await sb.from('songs').select(FULL).eq('id', id).maybeSingle();
+      if (error) throw error;
+      const i = songs.findIndex(x => x.id === id);
+      if (!data) { if (i >= 0) songs.splice(i, 1); return null; }
+      const full = fromRow(data);
+      if (i >= 0) songs[i] = full; else songs.push(full);
+      if (canEdit(full)) { editable.add(id); synced.set(id, JSON.stringify(payload(full))); }
+      return full;
+    })().finally(() => loading.delete(id));
+    loading.set(id, pr);
+    return pr;
+  }
+
+  /** načte všechny nenačtené písničky (pro zálohu) */
+  async function loadAll() {
+    const ids = songs.filter(s => s.partial).map(s => s.id);
+    for (let i = 0; i < ids.length; i += 50) {
+      const { data, error } = await sb.from('songs').select(FULL).in('id', ids.slice(i, i + 50));
+      if (error) throw error;
+      for (const r of data) {
+        const j = songs.findIndex(x => x.id === r.id);
+        if (j >= 0 && songs[j].partial) {
+          songs[j] = fromRow(r);
+          if (canEdit(songs[j])) synced.set(r.id, JSON.stringify(payload(songs[j])));
+        }
+      }
     }
   }
 
@@ -128,26 +189,28 @@ window.KSB_SUPA = (() => {
       const ids = new Set();
       for (const s of songs) {
         ids.add(s.id);
-        if (!canEdit(s)) continue;
+        if (!canEdit(s) || s.partial) continue;   // nenačtenou písničku nikdy neukládat
         const p = payload(s);
         const json = JSON.stringify(p);
         if (synced.get(s.id) === json) continue;
         let res;
         if (inDb.has(s.id)) {
           res = await sb.from('songs').update(p).eq('id', s.id).select('updated_at').maybeSingle();
+          if (!res.error && res.data) s.serverUpdated = res.data.updated_at;
         } else {
           res = await sb.from('songs').insert({ id: s.id, author_name: auth.name || 'Kytarista', ...p })
             .select('owner, author_name, updated_at').single();
-          if (!res.error) { inDb.add(s.id); s.owner = res.data.owner; s.author = res.data.author_name; }
+          if (!res.error) { inDb.add(s.id); editable.add(s.id); s.owner = res.data.owner; s.author = res.data.author_name; s.serverUpdated = res.data.updated_at; }
         }
         if (res.error) { failed = true; console.warn('Uložení selhalo', s.id, res.error.message); continue; }
         synced.set(s.id, json);
       }
-      for (const id of [...synced.keys()]) {
+      // smazané: písničky v databázi, které smím upravit, ale v seznamu už nejsou (i nenačtené)
+      for (const id of [...editable]) {
         if (ids.has(id)) continue;
         const { error } = await sb.from('songs').delete().eq('id', id);
         if (error) { failed = true; continue; }
-        synced.delete(id); inDb.delete(id);
+        synced.delete(id); inDb.delete(id); editable.delete(id);
       }
     } finally {
       flushing = false;
@@ -260,5 +323,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, importLocal };
+  return { init, schedule, openLogin, openNameModal, logout, importLocal, ensureLoaded, loadAll };
 })();

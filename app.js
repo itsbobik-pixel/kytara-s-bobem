@@ -510,9 +510,19 @@ function render() {
   if (prevView !== route.view) window.scrollTo(0, 0);
   if (route.id !== historyFor || route.mode === 'edit') viewShift = 0;   // transpozice se nikdy nepřenáší
   if (route.id !== historyFor) { undoStack = []; redoStack = []; historyFor = route.id || null; selection = null; caret = null; expandedRefs = new Set(); }
+  const loadingSong = '<div class="wrap"><div class="empty"><div class="big-emoji">🎸</div><h2>Načítám song…</h2></div></div>';
   if ((route.view === 'song' || route.view === 'along') && !current()) {
-    if (auth.loading) { $('#app').innerHTML = '<div class="wrap"><div class="empty"><div class="big-emoji">🎸</div><h2>Načítám song…</h2></div></div>'; return; }
+    if (auth.loading) { $('#app').innerHTML = loadingSong; return; }
     go('#'); return;
+  }
+  // ze seznamu známe jen název – celou písničku dočti z databáze
+  if ((route.view === 'song' || route.view === 'along') && current().partial) {
+    $('#app').innerHTML = loadingSong;
+    const id = route.id;
+    window.KSB_SUPA.ensureLoaded(id)
+      .then(() => { if (route.id === id) render(); })
+      .catch(() => { toast('Song se nepodařilo načíst. Zkontroluj připojení.'); });
+    return;
   }
   document.documentElement.style.setProperty('--fs', settings.fontSize + 'px');
   if (route.view === 'along') renderAlong();
@@ -621,7 +631,9 @@ function renderLibrary() {
           h('a', { class: 'sl-btn', href: '#song-' + s.id, title: 'Upravit' }, '✎'),
           h('button', {
             class: 'sl-btn', title: 'Smazat song', 'aria-label': 'Smazat song',
-            onclick: () => {
+            onclick: async () => {
+              // nenačtenou písničku nejdřív načti celou, ať jde „Zpět“ vrátit i s textem
+              if (s.partial) { try { s = await window.KSB_SUPA.ensureLoaded(s.id); } catch { toast('Smazání se nepovedlo, zkus to znovu.'); return; } if (!s) return; }
               const idx = songs.indexOf(s);
               songs = songs.filter(x => x !== s);
               saveSongs(); renderLibrary();
@@ -662,6 +674,10 @@ každej zpívá falešně, ale nikdo to nevnímá.
 }
 
 async function exportSongs() {
+  if (window.KSB_SUPA && songs.some(s => s.partial)) {
+    toast('Připravuju zálohu…');
+    try { await window.KSB_SUPA.loadAll(); } catch { toast('Zálohu se nepodařilo připravit.'); return; }
+  }
   const json = JSON.stringify({ app: 'kytara-s-bobem', version: 1, songs }, null, 2);
   const filename = 'playalong-zaloha.json';
   const dl = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
