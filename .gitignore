@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 helper/tmp/
+CLAUDE.md
+_test-local.html
