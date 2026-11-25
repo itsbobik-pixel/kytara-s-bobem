@@ -824,3 +824,7 @@ body.al-editing .al-yt { bottom: 236px; }
 }
 .sl-along-pill:hover { transform: translateY(-1px); filter: brightness(1.06); }
 .sl-along-pill .ico svg { width: 19px; height: 19px; }
+.sl-link { text-decoration: none; font-weight: 700; font-size: 14px; padding: 6px 8px; border-radius: 8px; white-space: nowrap; }
+.sl-link:hover { background: var(--surface-2); text-decoration: underline; }
+.sl-link-along { color: color-mix(in srgb, var(--d5) 85%, var(--ink)); }
+.sl-link-chords { color: color-mix(in srgb, var(--d3) 85%, var(--ink)); }
