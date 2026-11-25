@@ -685,8 +685,8 @@ body.playing .topbar { display: none; }
 /* =========================================================
    Play-along
    ========================================================= */
-.al-btn { background: var(--d6); color: #fff; border-color: var(--d6); box-shadow: 0 2px 0 color-mix(in srgb, var(--d6) 60%, #000); }
-.al-btn:hover { filter: brightness(1.06); border-color: var(--d6); }
+.al-btn { background: linear-gradient(90deg, var(--d0), var(--d5), var(--d4)); color: #fff; border: none; }
+.al-btn:hover { filter: brightness(1.08); }
 .along .play-bar { position: sticky; top: 0; z-index: 20; background: var(--bg); }
 .al-play { min-width: 44px; font-size: 16px !important; }
 .al-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; min-width: 84px; }
@@ -788,7 +788,3 @@ body.al-editing .al-yt { bottom: 236px; }
 .line.instr { white-space: normal; }
 .al-sec-btn { cursor: pointer; }
 
-/* „Přidat song“: plná barva místo duhového gradientu */
-.btn.add-btn { background: var(--d0); color: #fff; border-color: var(--d0); box-shadow: 0 3px 0 color-mix(in srgb, var(--d0) 60%, #000); }
-.btn.add-btn:hover { filter: brightness(1.05); border-color: var(--d0); }
-.btn.add-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 color-mix(in srgb, var(--d0) 60%, #000); }

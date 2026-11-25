@@ -577,7 +577,7 @@ function renderLibrary() {
       h('p', {}, shared
         ? 'Písničky s akordy pro všechny. Přihlaš se a přidej svoje.'
         : 'Vlož text, vyber tóninu a přetáhni akordy přímo nad slova.')),
-    h('button', { class: 'btn add-btn big', onclick: addSong }, '+ Přidat song')));
+    h('button', { class: 'btn rainbow big', onclick: addSong }, '+ Přidat song')));
 
   if (shared && auth.user && auth.localOnly.length) {
     wrap.append(h('div', { class: 'banner' },
