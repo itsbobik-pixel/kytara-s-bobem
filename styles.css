@@ -492,3 +492,10 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 /* zpět / vrátit */
 .tgroup.history button { font-weight: 600; font-size: 14px; padding: 7px 12px; }
 .tgroup button:disabled { opacity: .35; cursor: default; background: transparent; }
+
+/* označení akordů a kurzor pro vložení */
+.c.sel { background: color-mix(in srgb, var(--d3) 22%, transparent); }
+.c.sel .chord { outline: 2px solid var(--ink); outline-offset: 1px; }
+.c.caret { box-shadow: inset 2px 0 0 var(--d0); animation: caret-blink 1s steps(1) infinite; }
+@keyframes caret-blink { 50% { box-shadow: inset 2px 0 0 transparent; } }
+.edit .sheet { user-select: none; }

@@ -502,7 +502,7 @@ function render() {
   stopAutoscroll();
   armed = null;
   route = parseHash();
-  if (route.id !== historyFor) { undoStack = []; redoStack = []; historyFor = route.id || null; }
+  if (route.id !== historyFor) { undoStack = []; redoStack = []; historyFor = route.id || null; selection = null; caret = null; }
   if (route.view === 'song' && !current()) {
     if (auth.loading) { $('#app').innerHTML = '<div class="wrap"><div class="empty"><div class="big-emoji">🎸</div><h2>Načítám song…</h2></div></div>'; return; }
     go('#'); return;
@@ -1096,7 +1096,7 @@ function renderPalette(song) {
       h('button', { class: 'chip add', onclick: e => openChordBuilder(e.currentTarget) }, '+ akord'))),
     h('div', { class: 'tip' },
       h('b', {}, 'Přetáhni'), ' akord nad slabiku, nebo ho ', h('b', {}, 'klikni'), ' a pak klikej do textu. ',
-      'Klik na akord v textu = změna, odtažení pryč = smazání. ', h('b', {}, 'Ctrl+Z'), ' = zpět, ', h('b', {}, 'Ctrl+Y'), ' = vrátit.'));
+      'Klik na akord v textu = změna, odtažení pryč = smazání. ', h('b', {}, 'Ctrl+Z'), ' = zpět, ', h('b', {}, 'Ctrl+Y'), ' = vrátit. Přejeď myší přes řádek, ', h('b', {}, 'Ctrl+C'), ', klikni jinam a ', h('b', {}, 'Ctrl+V'), ' = opakování akordů.'));
 }
 const sameChord = (a, b) => a.root === b.root && (a.q || '') === (b.q || '') && (a.bass ?? null) === (b.bass ?? null);
 
@@ -1173,6 +1173,8 @@ function renderSheet() {
     }
     if (!play) {
       lineEl.append(h('span', { class: 'line-tools', contenteditable: 'false' },
+        h('button', { title: 'Kopírovat akordy celého řádku', onclick: () => copyChords(li, -Infinity, Infinity, 0) }, '⧉'),
+        h('button', { title: 'Vložit zkopírované akordy do tohoto řádku', onclick: () => pasteChords(li, 0) }, '📋'),
         h('button', { title: 'Vložit prázdný řádek pod (třeba pro intro/mezihru)', onclick: () => insertLine(li + 1) }, '+'),
         h('button', { title: 'Smazat řádek', onclick: () => deleteLine(li) }, '×')));
     }
@@ -1187,7 +1189,40 @@ function renderSheet() {
       if (!c || !l || e.target.closest('.chord')) return;
       placeChord(+l.dataset.li, +c.dataset.i, armed);
     };
+    // kliknutí = kurzor pro vložení, tažení myší přes řádek = označení akordů
+    sheet.onpointerdown = e => {
+      if (armed || e.button !== 0) return;
+      const c = e.target.closest('.c');
+      const l = e.target.closest('.line');
+      if (!c || !l || e.target.closest('.chord, .line-tools')) return;
+      const li = +l.dataset.li, i = +c.dataset.i;
+      if (e.shiftKey && caret && caret.li === li) { selection = { li, a: caret.pos, b: i }; paintSelection(); return; }
+      selection = null; caret = { li, pos: i };
+      paintSelection();
+      if (e.pointerType !== 'mouse') return;      // na dotyku nechej rolování
+      e.preventDefault();
+      const move = ev => {
+        const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.c');
+        if (!el || el.closest('.line') !== l) return;
+        const j = +el.dataset.i;
+        if (j === i && !selection) return;
+        selection = { li, a: i, b: j };
+        paintSelection();
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        if (selection) {
+          const r = selRange();
+          const n = current().lines[li].chords.filter(ch => ch.pos >= r.from && ch.pos <= r.to).length;
+          if (n) toast(`Označeno akordů: ${n} – Ctrl+C je zkopíruje`);
+        }
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    };
   }
+  paintSelection();
   updateHistoryButtons();
 }
 
@@ -1202,13 +1237,55 @@ function placeChord(li, pos, chord) {
   touch(song);
   renderSheet();
 }
+// ---------- kopírování akordů mezi řádky ----------
+let selection = null;   // { li, a, b } označený úsek řádku
+let caret = null;       // { li, pos } kam vložit
+let chordClip = null;   // [{ d, root, q, bass }] – d = vzdálenost od začátku kopie
+const selRange = () => selection && { li: selection.li, from: Math.min(selection.a, selection.b), to: Math.max(selection.a, selection.b) };
+
+function paintSelection() {
+  $$('.c.sel, .c.caret').forEach(el => el.classList.remove('sel', 'caret'));
+  const r = selRange();
+  if (r) $$(`.line[data-li="${r.li}"] > .c`).forEach(el => { const i = +el.dataset.i; if (i >= r.from && i <= r.to) el.classList.add('sel'); });
+  if (caret && !r) $(`.line[data-li="${caret.li}"] > .c[data-i="${caret.pos}"]`)?.classList.add('caret');
+}
+function clearSelection() { selection = null; caret = null; paintSelection(); }
+
+/** zkopíruj akordy z řádku li mezi pozicemi from–to; anchor = odkud se měří vzdálenost */
+function copyChords(li, from, to, anchor = from) {
+  const song = current();
+  const cs = song.lines[li].chords.filter(c => c.pos >= from && c.pos <= to);
+  if (!cs.length) { toast('Tady nejsou žádné akordy ke zkopírování'); return; }
+  chordClip = cs.map(c => ({ d: c.pos - anchor, root: c.root, q: c.q || '', bass: c.bass ?? null }));
+  toast(`Zkopírováno akordů: ${cs.length} – klikni do jiného řádku a dej Ctrl+V (nebo 📋)`);
+}
+function pasteChords(li, at) {
+  if (!chordClip) { toast('Nejdřív zkopíruj akordy (označ je myší a Ctrl+C, nebo ⧉ u řádku)'); return; }
+  const song = current();
+  const line = song.lines[li];
+  if (!line) return;
+  pushUndo(song);
+  for (const c of chordClip) {
+    const pos = at + c.d;
+    if (pos < PRE_MIN) continue;
+    line.chords = line.chords.filter(x => x.pos !== pos);
+    line.chords.push({ pos, root: c.root, q: c.q, bass: c.bass });
+  }
+  line.chords.sort((a, b) => a.pos - b.pos);
+  touch(song);
+  renderSheet();
+  toast(`Vloženo akordů: ${chordClip.length}`, 'Zpět', undo);
+}
+
 function insertLine(at) {
+  clearSelection();
   const song = current();
   pushUndo(song);
   song.lines.splice(at, 0, { text: '', chords: [], section: null });
   touch(song); renderSheet();
 }
 function deleteLine(li) {
+  clearSelection();
   const song = current();
   pushUndo(song);
   const [removed] = song.lines.splice(li, 1);
@@ -1573,9 +1650,23 @@ document.addEventListener('keydown', e => {
     if (drag) { teardownDrag(); return; }
     if (!$('#popover').hidden) { closePopover(); return; }
     if ($('#modalRoot').children.length) { closeModal(); return; }
-    if (armed) { armed = null; renderEditor(); }
+    if (armed) { armed = null; renderEditor(); return; }
+    if (selection || caret) clearSelection();
   }
   const k = e.key.toLowerCase();
+  const editing = route.view === 'song' && current() && !isPlay(current());
+  if ((e.ctrlKey || e.metaKey) && !typing && editing && k === 'c' && selection) {
+    e.preventDefault();
+    const r = selRange();
+    copyChords(r.li, r.from, r.to);
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && !typing && editing && k === 'v' && (caret || selection)) {
+    e.preventDefault();
+    const at = caret || { li: selRange().li, pos: selRange().from };
+    pasteChords(at.li, at.pos);
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && !typing && route.view === 'song' && (k === 'z' || k === 'y')) {
     e.preventDefault();
     if (k === 'y' || e.shiftKey) redo(); else undo();
