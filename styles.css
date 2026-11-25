@@ -651,3 +651,31 @@ body.playing .topbar { display: none; }
 
 /* akordy prvního řádku se vejdou do barevného pole */
 .line.block-start.has-chords { padding-top: .5em; }
+
+/* =========================================================
+   Kompaktní zobrazení
+   ========================================================= */
+.tbtn.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.line-pair { display: flex; align-items: stretch; position: relative; }
+.line-pair > .line { flex: 1 1 0; min-width: 0; }
+.line-pair > .line:first-child { border-right: none; }
+.line-pair > .line + .line { padding-left: calc(10px + 1.7em); box-shadow: inset 1px 0 0 color-mix(in srgb, var(--sc) 40%, transparent); }
+.line-pair.has-label > .line:last-of-type { padding-right: 4.6em; }
+.line-pair.has-label > .sec-label {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  margin: 0; padding: 2px 8px; font-size: 11px; line-height: 1.4; border-radius: 8px;
+}
+.rep-badge {
+  display: inline-block; margin-left: .5em; padding: .05em .5em; border-radius: 999px;
+  font-size: .68em; font-weight: 800; line-height: 1.4; vertical-align: middle;
+  background: var(--ink); color: var(--bg);
+}
+.collapsed-ref {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-direction: row-reverse;
+  margin: 4px 0 8px; padding: 6px 10px; cursor: pointer; border-radius: 8px 0 0 8px;
+  border-right: 4px solid var(--sc); background: color-mix(in srgb, var(--sc) 8%, transparent);
+}
+.collapsed-ref:hover { background: color-mix(in srgb, var(--sc) 16%, transparent); }
+.collapsed-ref .sec-label { position: static; transform: none; margin: 0; }
+.cr-text { color: var(--muted); font-size: 14px; font-weight: 600; }
+.line.rep-line { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ink) 35%, transparent); }

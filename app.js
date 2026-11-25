@@ -502,7 +502,7 @@ function render() {
   stopAutoscroll();
   armed = null;
   route = parseHash();
-  if (route.id !== historyFor) { undoStack = []; redoStack = []; historyFor = route.id || null; selection = null; caret = null; }
+  if (route.id !== historyFor) { undoStack = []; redoStack = []; historyFor = route.id || null; selection = null; caret = null; expandedRefs = new Set(); }
   if (route.view === 'song' && !current()) {
     if (auth.loading) { $('#app').innerHTML = '<div class="wrap"><div class="empty"><div class="big-emoji">🎸</div><h2>Načítám song…</h2></div></div>'; return; }
     go('#'); return;
@@ -1061,6 +1061,11 @@ function renderEditor() {
       class: 'tbtn' + (settings.cols !== false ? ' on' : ''), title: 'Text do sloupců / jeden sloupec',
       onclick: () => { settings.cols = settings.cols === false; saveSettings(); renderEditor(); },
     }, settings.cols !== false ? 'Sloupce' : 'Sloupec'));
+    controls.prepend(h('button', {
+      class: 'tbtn' + (settings.compact !== false ? ' on' : ''),
+      title: 'Kompaktně: krátké řádky po dvou, opakování ×2, stejný refrén sbalený. Písnička se nemění.',
+      onclick: () => { settings.compact = settings.compact === false; saveSettings(); renderEditor(); },
+    }, 'Kompaktně'));
     ed.append(h('div', { class: 'play-bar' },
       h('a', { class: 'pb-back', href: '#', title: 'Zpět na seznam' }, '←'),
       h('div', { class: 'pb-name', title: (song.artist ? song.artist + ' – ' : '') + song.title },
@@ -1122,6 +1127,85 @@ function renderPalette(song) {
 }
 const sameChord = (a, b) => a.root === b.root && (a.q || '') === (b.q || '') && (a.bass ?? null) === (b.bass ?? null);
 
+// =========================================================
+//  KOMPAKTNÍ ZOBRAZENÍ – jen pevná pravidla, uložená písnička se nemění
+// =========================================================
+let expandedRefs = new Set();   // sbalené refrény, které si uživatel rozbalil
+const lineSig = l => JSON.stringify([l.text.trim().toLowerCase(), l.chords.map(c => [c.pos, c.root, c.q || '', c.bass ?? null])]);
+
+function compactPlan(song, single) {
+  const L = song.lines;
+  const plan = { skip: new Set(), pairWith: new Map(), repeatEnd: new Map(), collapsed: new Set(), repLines: new Set() };
+  const inRepeat = new Set();
+  const starts = [];
+  L.forEach((l, i) => { if (i === 0 || l.section) starts.push(i); });
+  const ranges = starts.map((a, k) => [a, k + 1 < starts.length ? starts[k + 1] : L.length]);
+
+  // 1) refrén, který je úplně stejný jako první refrén → sbalit
+  let firstChorus = null;
+  for (const [a, b] of ranges) {
+    if (L[a].section !== 'chorus') continue;
+    let e = b;
+    while (e > a && !L[e - 1].text && !L[e - 1].chords.length) e--;
+    const sig = L.slice(a, e).map(lineSig).join('|');
+    if (firstChorus === null) { firstChorus = sig; continue; }
+    if (sig === firstChorus && !expandedRefs.has(a)) {
+      plan.collapsed.add(a);
+      for (let i = a; i < b; i++) plan.skip.add(i);
+    }
+  }
+
+  // 2) stejné řádky (nebo skupiny až 4 řádků) hned po sobě → jednou s ×N
+  for (const [a, b] of ranges) {
+    if (plan.collapsed.has(a)) continue;
+    const same = (x, y) => x < b && y < b && !!L[x].text && lineSig(L[x]) === lineSig(L[y]);
+    const bestAt = s => {
+      let best = null;
+      for (let k = 1; k <= 4; k++) {
+        let r = 1;
+        for (;;) {
+          let ok = true;
+          for (let t = 0; t < k; t++) if (!same(s + t, s + r * k + t)) { ok = false; break; }
+          if (!ok) break;
+          r++;
+        }
+        if (r >= 2 && (!best || r * k > best.r * best.k)) best = { k, r, end: s + r * k };
+      }
+      return best;
+    };
+    let i = a;
+    while (i < b) {
+      if (!L[i].text) { i++; continue; }
+      let best = bestAt(i);
+      // když skupina začínající o kousek dál dojde dál (např. „A / B“ ×5 místo „B / A“ ×5), počkej na ni
+      if (best) for (let o = 1; o < best.k; o++) { const alt = bestAt(i + o); if (alt && alt.end > best.end) { best = null; break; } }
+      if (best) {
+        for (let t = 0; t < best.k * best.r; t++) { inRepeat.add(i + t); if (t >= best.k) plan.skip.add(i + t); else if (best.k > 1) plan.repLines.add(i + t); }
+        plan.repeatEnd.set(i + best.k - 1, best.r);
+        i += best.k * best.r;
+      } else i++;
+    }
+  }
+
+  // 3) dva krátké řádky po sobě → vedle sebe (jen v jednom sloupci, kde je místo)
+  if (single) {
+    const SHORT = 30, SUM = 56;
+    const ok = (x, b) => x < b && !plan.skip.has(x) && !inRepeat.has(x) && !!L[x].text && L[x].text.length <= SHORT && !L[x].chords.some(c => c.pos > L[x].text.length + 2);
+    for (const [a, b] of ranges) {
+      if (plan.collapsed.has(a)) continue;
+      let i = a;
+      while (i < b) {
+        if (ok(i, b) && ok(i + 1, b) && !L[i + 1].section && L[i].text.length + L[i + 1].text.length <= SUM) {
+          plan.pairWith.set(i, i + 1);
+          plan.skip.add(i + 1);
+          i += 2;
+        } else i++;
+      }
+    }
+  }
+  return plan;
+}
+
 function renderSheet() {
   const song = current();
   const sheet = $('#sheet');
@@ -1149,45 +1233,18 @@ function renderSheet() {
   const inlineLabels = play && settings.cols === false;   // jeden sloupec: štítek vpravo na řádku s textem
   let markShort = false;
   const newBlock = () => { block = h('div', { class: 'sec-block' }); sheet.append(block); };
-  song.lines.forEach((line, li) => {
-    if (line.section) {
-      if (play) newBlock();
-      sec = line.section;
-      counts[sec] = (counts[sec] || 0) + 1;
-      const total = song.lines.filter(l => l.section === sec).length;
-      const label = secLabel(sec) + (sec === 'verse' && total > 1 ? ' ' + counts[sec] : '');
-      const lab = h('div', { class: 'sec-label', 'data-s': sec, title: play ? '' : 'Klikni pro změnu, táhni pro přesun' }, label);
-      if (!play) {
-        lab.addEventListener('pointerdown', e => startDrag(e, {
-          kind: 'moveSection', li, type: sec, label: secLabel(sec), sec,
-          onClick: () => openSectionPopover(lab, li),
-        }));
-      }
-      // v jednom sloupci štítek na stejný řádek jako první řádek textu (vpravo), ve sloupcích nad část
-      if (inlineLabels) pendingLabel = lab;
-      else block.append(h('div', { class: 'sec-head' }, lab));
-      markFirst = true;
-      blockStart = true;
-      // krátká část (1 řádek) potřebuje víc výšky, ať se do ní svislý štítek vejde
-      const next = song.lines.findIndex((l, j) => j > li && l.section);
-      markShort = (next < 0 ? song.lines.length : next) - li <= 1;
-    }
-    if (!block) newBlock();
-    const empty = !line.text && !line.chords.length;
-    if (play && empty) {
-      if (pendingLabel) { block.append(h('div', { class: 'sec-head' }, pendingLabel)); pendingLabel = null; }
-      block.append(h('div', { class: 'gap' }));
-      blockStart = true;
-      return;
-    }
+  // kompaktní zobrazení (jen při hraní): páry krátkých řádků, ×N u opakování, sbalený opakovaný refrén
+  const plan = play && settings.compact !== false ? compactPlan(song, settings.cols === false) : null;
 
+  /** vytvoř element jednoho řádku */
+  const makeLine = (line, li, extra = '') => {
+    const empty = !line.text && !line.chords.length;
     const maxPos = line.chords.reduce((m, c) => Math.max(m, c.pos + 1), 0);
     let len = Math.max(line.text.length, maxPos);
     if (!play) len = line.text ? Math.max(len, line.text.length + 4) : Math.max(len + 3, innerWidth < 600 ? 14 : 28);
     else if (!line.text) len = Math.max(len, 1);
-
     const lineEl = h('div', {
-      class: 'line' + (empty ? ' empty-line' : '') + (!line.text ? ' instr' : '') + (markFirst ? ' sec-first' : '') + (markFirst && markShort ? ' sec-short' : '') + (line.chords.length ? ' has-chords' : '') + (blockStart ? ' block-start' : ''),
+      class: 'line' + (empty ? ' empty-line' : '') + (!line.text ? ' instr' : '') + extra,
       'data-li': li, 'data-s': sec || null,
     });
     const byPos = new Map(line.chords.map(c => [c.pos, c]));
@@ -1222,8 +1279,62 @@ function renderSheet() {
         h('button', { title: 'Vložit prázdný řádek pod (třeba pro intro/mezihru)', onclick: () => insertLine(li + 1) }, '+'),
         h('button', { title: 'Smazat řádek', onclick: () => deleteLine(li) }, '×')));
     }
-    if (pendingLabel) { lineEl.classList.add('has-label'); lineEl.append(pendingLabel); pendingLabel = null; }
-    block.append(lineEl);
+    if (plan?.repeatEnd.has(li)) lineEl.append(h('span', { class: 'rep-badge', title: 'Opakuj' }, '×' + plan.repeatEnd.get(li)));
+    return lineEl;
+  };
+
+  song.lines.forEach((line, li) => {
+    if (line.section) {
+      if (play) newBlock();
+      sec = line.section;
+      counts[sec] = (counts[sec] || 0) + 1;
+      const total = song.lines.filter(l => l.section === sec).length;
+      const label = secLabel(sec) + (sec === 'verse' && total > 1 ? ' ' + counts[sec] : '');
+      const lab = h('div', { class: 'sec-label', 'data-s': sec, title: play ? '' : 'Klikni pro změnu, táhni pro přesun' }, label);
+      if (!play) {
+        lab.addEventListener('pointerdown', e => startDrag(e, {
+          kind: 'moveSection', li, type: sec, label: secLabel(sec), sec,
+          onClick: () => openSectionPopover(lab, li),
+        }));
+      }
+      markFirst = true;
+      blockStart = true;
+      // sbalený opakovaný refrén: jen štítek a řádek „stejný jako výše“
+      if (plan?.collapsed.has(li)) {
+        block.append(h('div', { class: 'collapsed-ref', 'data-s': sec, role: 'button', tabindex: 0,
+          title: 'Klikni pro rozbalení',
+          onclick: () => { expandedRefs.add(li); renderSheet(); },
+          onkeydown: e => { if (e.key === 'Enter') { expandedRefs.add(li); renderSheet(); } },
+        }, lab, h('span', { class: 'cr-text' }, 'stejný jako výše · rozbalit ▸')));
+        return;
+      }
+      // v jednom sloupci štítek na stejný řádek jako první řádek textu (vpravo), ve sloupcích nad část
+      if (inlineLabels) pendingLabel = lab;
+      else block.append(h('div', { class: 'sec-head' }, lab));
+      // krátká část (1 řádek) potřebuje víc výšky
+      const next = song.lines.findIndex((l, j) => j > li && l.section);
+      markShort = (next < 0 ? song.lines.length : next) - li <= 1;
+    }
+    if (plan?.skip.has(li)) return;
+    if (!block) newBlock();
+    const empty = !line.text && !line.chords.length;
+    if (play && empty) {
+      if (pendingLabel) { block.append(h('div', { class: 'sec-head' }, pendingLabel)); pendingLabel = null; }
+      block.append(h('div', { class: 'gap' }));
+      blockStart = true;
+      return;
+    }
+
+    const partner = plan?.pairWith.get(li);
+    const anyChords = line.chords.length || (partner != null && song.lines[partner].chords.length);
+    const cls = (markFirst ? ' sec-first' : '') + (markFirst && markShort ? ' sec-short' : '')
+      + (anyChords ? ' has-chords' : '') + (blockStart ? ' block-start' : '');
+    let el = makeLine(line, li, cls + (plan?.repLines.has(li) ? ' rep-line' : ''));
+    if (partner != null) {
+      el = h('div', { class: 'line-pair', 'data-s': sec || null }, el, makeLine(song.lines[partner], partner, cls.replace(' sec-first', '')));
+    }
+    if (pendingLabel) { el.classList.add('has-label'); el.append(pendingLabel); pendingLabel = null; }
+    block.append(el);
     markFirst = false;
     blockStart = false;
   });
@@ -1707,7 +1818,7 @@ function toast(msg, actionLabel, action) {
 //  KLÁVESNICE
 // =========================================================
 document.addEventListener('keydown', e => {
-  const typing = e.target.matches('input, textarea');
+  const typing = !!e.target.matches?.('input, textarea');
   if (e.key === 'Escape') {
     if (drag) { teardownDrag(); return; }
     if (!$('#popover').hidden) { closePopover(); return; }
