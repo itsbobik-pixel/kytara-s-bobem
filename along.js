@@ -193,6 +193,7 @@ async function ytStart(id) {
       },
       onStateChange: e => {
         AL.ytState = e.data;
+        if (AL.engine !== 'yt') return;
         AL.playing = e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING;
         if (e.data === YT.PlayerState.ENDED) AL.playing = false;
         AL.ytRaw = null;
@@ -359,7 +360,11 @@ function renderAlongBody() {
         disabled: !ready, 'aria-label': 'Posun v písničce',
         oninput: e => alSeek(+e.target.value),
       }),
-      AL.hasStems ? h('label', { class: 'al-voc', title: 'Hlasitost zpěvu – úplně vlevo = karaoke bez vokálu' },
+      AL.hasStems && AL.sync?.yt ? h('button', {
+        class: 'tbtn', title: 'Přepnout, odkud hraje hudba. YouTube = tak, jak to slyší ostatní.',
+        onclick: () => alSwitchSource(AL.engine === 'yt' ? 'wa' : 'yt'),
+      }, AL.engine === 'yt' ? 'Zdroj: YouTube' : 'Zdroj: moje stopy') : null,
+      AL.hasStems && AL.engine === 'wa' ? h('label', { class: 'al-voc', title: 'Hlasitost zpěvu – úplně vlevo = karaoke bez vokálu' },
         h('span', {}, (settings.vocal ?? 1) < 0.05 ? '🎸' : '🎤'),
         h('input', {
           type: 'range', min: 0, max: 1, step: 0.05, value: settings.vocal ?? 1, 'aria-label': 'Hlasitost vokálu',
@@ -715,6 +720,23 @@ function tlPlayhead(t) {
     return;
   }
   head.style.left = tlX(t) + 'px';
+}
+
+/** přepnutí mezi stopami z pomocníka a YouTube videem (na stejném místě písničky) */
+function alSwitchSource(engine) {
+  const t = alNow();
+  alPause();
+  if (engine === 'yt') {
+    AL.offset = t;
+    ytStart(AL.sync.yt).then(() => { if (AL.ytReady) AL.yt.seekTo(t, true); });
+  } else {
+    const box = $('#alYtBox');
+    if (box) box.hidden = true;
+    AL.engine = 'wa';
+    AL.playing = false;
+    AL.offset = t;
+  }
+  renderAlongBody();
 }
 
 function updatePlayBtn() {
