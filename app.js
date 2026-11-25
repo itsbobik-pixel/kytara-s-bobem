@@ -329,9 +329,11 @@ function detectSection(line) {
   return null;
 }
 
+const PRE_MIN = -8;     // nejvýš 8 míst před začátkem textu
+const PRE_SLOTS = 3;    // kolik volných míst před textem ukázat v editoru
 function normalizeChords(chords) {
   const out = [];
-  chords.map(c => ({ ...c, pos: Math.max(0, c.pos | 0) }))
+  chords.map(c => ({ ...c, pos: Math.max(PRE_MIN, c.pos | 0) }))   // záporná pozice = akord před začátkem textu
     .sort((a, b) => a.pos - b.pos)
     .forEach(c => {
       const prev = out[out.length - 1];
@@ -430,9 +432,11 @@ function guessKeyScored(lines) {
 
 function songToText(song) {
   return song.lines.map(l => {
-    let s = l.text.padEnd(l.chords.reduce((m, c) => Math.max(m, c.pos), 0), ' ');
+    const off = -Math.min(0, ...l.chords.map(c => c.pos));   // akordy před textem → odsadit text
+    let s = (' '.repeat(off) + l.text).padEnd(l.chords.reduce((m, c) => Math.max(m, c.pos + off), 0), ' ');
     [...l.chords].sort((a, b) => b.pos - a.pos).forEach(c => {
-      s = s.slice(0, c.pos) + '[' + chordName(c, song.key) + ']' + s.slice(c.pos);
+      const p = c.pos + off;
+      s = s.slice(0, p) + '[' + chordName(c, song.key) + ']' + s.slice(p);
     });
     s = s.replace(/\s+$/, '');
     return (l.section ? '[' + secLabel(l.section) + ']\n' : '') + s;
@@ -1120,9 +1124,13 @@ function renderSheet() {
       'data-li': li, 'data-s': sec || null,
     });
     const byPos = new Map(line.chords.map(c => [c.pos, c]));
-    for (let i = 0; i < len; i++) {
-      const ch = i < line.text.length ? line.text[i] : null;
-      const span = h('span', { class: 'c' + (ch == null ? ' pad' : ''), 'data-i': i }, ch == null ? ' ' : ch);
+    // místa před textem: v editoru vždy pár volných, při hraní jen když tam akord je
+    const minPos = line.chords.reduce((m, c) => Math.min(m, c.pos), 0);
+    const start = !play && line.text ? Math.min(-PRE_SLOTS, minPos) : minPos;
+    if (start < 0) lineEl.style.setProperty('--pre', String(-start));
+    for (let i = start; i < len; i++) {
+      const ch = i >= 0 && i < line.text.length ? line.text[i] : null;
+      const span = h('span', { class: 'c' + (ch == null ? ' pad' : '') + (i < 0 ? ' pre' : ''), 'data-i': i }, ch == null ? ' ' : ch);
       const chord = byPos.get(i);
       if (chord) {
         const ce = h('span', { class: 'chord ' + degClass(chord.root, song.key) }, chordName(chord, song.key));
