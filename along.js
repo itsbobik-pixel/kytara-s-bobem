@@ -196,6 +196,7 @@ async function ytStart(id) {
       },
       onStateChange: e => {
         AL.ytState = e.data;
+        AL.ytMoved = false;   // dopočítávat čas až po tom, co se písnička opravdu pohne
         if (AL.engine !== 'yt') return;
         AL.playing = e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING;
         if (e.data === YT.PlayerState.ENDED) AL.playing = false;
@@ -219,13 +220,18 @@ function ytIsAd() {
 function ytNow() {
   if (!AL.ytReady || !AL.yt?.getCurrentTime) return AL.offset;
   if (ytIsAd()) { AL.ytAd = true; AL.ytRaw = null; return AL.offset; }   // text čeká, kde byl
-  AL.ytAd = false;
   const raw = AL.yt.getCurrentTime() || 0;
   const p = performance.now();
-  if (raw !== AL.ytRaw) { AL.ytRaw = raw; AL.ytAt = p; }
+  if (raw !== AL.ytRaw) {
+    if (AL.ytRaw != null && AL.ytState === 1 && raw > AL.ytRaw) AL.ytMoved = true;
+    AL.ytRaw = raw; AL.ytAt = p;
+  }
   AL.offset = raw;
-  if (AL.ytState !== 1) return raw;
-  return raw + Math.min(0.5, (p - AL.ytAt) / 1000);
+  // přehrávač hlásí „hraje“, ale čas písničky se nehýbe → reklama (nebo načítání): nic nedopočítávej
+  const stuck = AL.ytState === 1 && p - AL.ytAt > 900;
+  AL.ytAd = stuck;
+  if (AL.ytState !== 1 || stuck || !AL.ytMoved) return raw;
+  return raw + Math.min(0.3, (p - AL.ytAt) / 1000);
 }
 
 /** editor: vložit / změnit odkaz na YouTube video, ze kterého časy vznikly */
@@ -412,7 +418,7 @@ function renderAlongBody() {
     h('div', { class: 'al-next-wrap' },
       h('small', {}, 'Další'), h('span', { id: 'alNext', class: 'chord al-next' }, '–'),
       h('div', { class: 'al-meter' }, h('i', { id: 'alMeter' }))),
-    h('div', { id: 'alAd', class: 'al-src al-ad', hidden: true }, '📺 Reklama na YouTube – text počká, až začne písnička'),
+    h('div', { id: 'alAd', class: 'al-src al-ad', hidden: true }, '📺 Reklama nebo načítání na YouTube – text počká'),
     AL.error ? h('div', { class: 'al-src al-err' }, AL.error) : null,
     !ready && AL.engine === 'yt' && !AL.error ? h('div', { class: 'al-src' }, 'Načítám YouTube…') : null,
     !ready && AL.engine !== 'yt' ? h('div', { class: 'al-src' },
