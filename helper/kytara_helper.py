@@ -151,16 +151,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # finish: spojit se zvukem – s vokálem (vokál + doprovod) a karaoke (jen doprovod)
         try:
             fps = int(q.get("fps", ["30"])[0])
-            pre_ms = int(float(q.get("pre", ["0"])[0]) * 1000)
+            # zvuk začíná v čase PRE videa; u ukázky (start > 0) se posune / ořízne
+            start = float(q.get("start", ["0"])[0])
+            pre = float(q.get("pre", ["0"])[0]) - start
+            pre_ms = int(max(0.0, pre) * 1000)
+            trim = f"atrim=start={max(0.0, -pre):.3f},asetpts=PTS-STARTPTS," if pre < 0 else ""
             name = re.sub(r"[^A-Za-z0-9_-]+", "-", q.get("name", ["video"])[0])[:80] or "video"
             stems = STEMS_DIR / vid
             voc, inst = stems / "vocals.mp3", stems / "no_vocals.mp3"
             if not inst.is_file():
                 self._json(400, {"error": "Chybí stopy (no_vocals.mp3) v helper/tmp/stems/" + vid}); return
-            versions = [(f"{name}-karaoke.mp4", ["-i", str(inst)], f"[1:a]adelay={pre_ms}:all=1,apad[a]")]
+            versions = [(f"{name}-karaoke.mp4", ["-i", str(inst)], f"[1:a]{trim}adelay={pre_ms}:all=1,apad[a]")]
             if voc.is_file():
                 versions.insert(0, (f"{name}-s-vokalem.mp4", ["-i", str(voc), "-i", str(inst)],
-                                    f"[1:a][2:a]amix=inputs=2:normalize=0,adelay={pre_ms}:all=1,apad[a]"))
+                                    f"[1:a][2:a]amix=inputs=2:normalize=0,{trim}adelay={pre_ms}:all=1,apad[a]"))
             # 1) syrový H.264 → MP4 s časovými značkami (jinak ffmpeg zvuk zahodí)
             vmp4 = folder / "video-only.mp4"
             r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-f", "h264", "-i", str(raw),
