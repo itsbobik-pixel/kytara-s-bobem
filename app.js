@@ -68,7 +68,7 @@ function saveSongs(now = false) {
 
 // ---------- kdo je přihlášený a co smí ----------
 // mode 'local' = vše v prohlížeči (nebo claude.ai cloud), 'supabase' = společný zpěvník
-const auth = { mode: 'local', user: null, admin: false, name: '', loading: false, localOnly: [] };
+const auth = { mode: 'local', user: null, anon: false, admin: false, name: '', loading: false, localOnly: [] };
 const canEdit = s => auth.mode !== 'supabase' || (!!auth.user && (auth.admin || ((!s.owner || s.owner === auth.user.id) && !s.approved)));
 const canCreate = () => auth.mode !== 'supabase' || !!auth.user;
 const isPlay = s => route.mode === 'play' || !canEdit(s);
@@ -560,7 +560,7 @@ function renderTopActions(extra = []) {
   box.append(...[
     h('span', { id: 'syncStatus', class: 'sync' }, statusText),
     ...extra,
-    auth.mode === 'supabase' && (auth.user
+    auth.mode === 'supabase' && (auth.user && !auth.anon
       ? h('button', {
           class: 'btn ghost user-btn', title: 'Klikni pro odhlášení',
           onclick: () => window.KSB_SUPA.logout(),
@@ -585,11 +585,18 @@ function renderLibrary() {
   document.body.classList.remove('playing');
   const shared = auth.mode === 'supabase';
   renderTopActions([
-    canCreate() && h('button', { class: 'btn ghost', onclick: exportSongs, title: 'Stáhnout zálohu songů' }, '⬇ Záloha'),
-    canCreate() && h('button', { class: 'btn ghost', onclick: importSongs, title: 'Nahrát zálohu' }, '⬆ Nahrát'),
+    canCreate() && !auth.anon && h('button', { class: 'btn ghost', onclick: exportSongs, title: 'Stáhnout zálohu songů' }, '⬇ Záloha'),
+    canCreate() && !auth.anon && h('button', { class: 'btn ghost', onclick: importSongs, title: 'Nahrát zálohu' }, '⬆ Nahrát'),
   ]);
 
-  const addSong = () => { if (!needLogin('Pro přidání songu se přihlas. Číst může kdokoli.')) openSongModal(); };
+  const addSong = async () => {
+    // přidat může i nepřihlášený: dostane anonymní účet, song čeká na schválení adminem
+    if (shared && !auth.user) {
+      try { await window.KSB_SUPA.signInAnon(); }
+      catch (e) { console.warn(e); if (needLogin('Pro přidání songu se přihlas. Číst může kdokoli.')) return; }
+    }
+    openSongModal();
+  };
   const wrap = h('div', { class: 'wrap' });
   wrap.append(h('section', { class: 'hero' },
     h('div', {},
@@ -597,7 +604,7 @@ function renderLibrary() {
         ? h('h1', {}, 'Společný ', h('span', { class: 'hl' }, 'zpěvník'))
         : h('h1', {}, 'Tvoje ', h('span', { class: 'hl' }, 'songy')),
       h('p', {}, shared
-        ? 'Písničky s akordy pro všechny. Přihlaš se a přidej svoje.'
+        ? 'Písničky s akordy pro všechny. Přidej i svoje, přihlášení není potřeba.'
         : 'Vlož text, vyber tóninu a přetáhni akordy přímo nad slova.')),
     h('button', { class: 'btn rainbow big', onclick: addSong }, '+ Přidat song')));
 

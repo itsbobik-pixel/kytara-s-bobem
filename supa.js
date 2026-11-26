@@ -131,7 +131,8 @@ window.KSB_SUPA = (() => {
     const user = session?.user || null;
     auth.user = user;
     auth.admin = false;
-    auth.name = user?.user_metadata?.name || '';
+    auth.anon = !!user?.is_anonymous;
+    auth.name = user?.user_metadata?.name || (auth.anon ? 'Host' : '');
     if (user) {
       const { data } = await sb.from('admins').select('user_id').eq('user_id', user.id).maybeSingle();
       auth.admin = !!data;
@@ -165,7 +166,7 @@ window.KSB_SUPA = (() => {
     if (location.search.includes('code=')) history.replaceState(null, '', location.pathname + location.hash);
     await loadUser(session);
     await reload();
-    if (auth.user && !auth.name) openNameModal();
+    if (auth.user && !auth.anon && !auth.name) openNameModal();
 
     // Pozor: uvnitř onAuthStateChange se nesmí čekat na další volání Supabase (zasekne se zámek
     // přihlášení a např. updateUser nikdy nedoběhne) → práci odložíme mimo callback.
@@ -321,6 +322,14 @@ window.KSB_SUPA = (() => {
     setTimeout(() => input.select(), 30);
   }
 
+  /** host bez e-mailu: anonymní účet, aby mohl přidat song (ten pak čeká na schválení) */
+  async function signInAnon() {
+    const { data, error } = await sb.auth.signInAnonymously();
+    if (error) throw error;
+    await loadUser(data.session);
+    await reload({ quiet: true });
+  }
+
   async function logout() {
     if (timer) { clearTimeout(timer); timer = 0; await flush(); }
     await sb.auth.signOut();
@@ -338,5 +347,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, importLocal, ensureLoaded, loadAll, approve };
 })();
