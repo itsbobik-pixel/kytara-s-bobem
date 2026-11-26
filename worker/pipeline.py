@@ -53,10 +53,15 @@ def transcribe(vocals, lang, prompt):
     if 'asr' not in _WX:
         _WX['asr'] = whisperx.load_model('large-v3', dev, compute_type='float16', language=lang)
     model = _WX['asr']
+    # text písničky jako nápověda (výrazně víc správně poznaných slov); options je dataclass nebo namedtuple
+    import dataclasses
     try:
-        model.options = model.options._replace(initial_prompt=prompt[:800])
-    except Exception:
-        pass
+        model.options = dataclasses.replace(model.options, initial_prompt=prompt[:800])
+    except TypeError:
+        try:
+            model.options = model.options._replace(initial_prompt=prompt[:800])
+        except Exception as e:  # noqa: BLE001
+            print('initial_prompt nejde nastavit:', e)
     audio = whisperx.load_audio(vocals)
     res = model.transcribe(audio, batch_size=8, language=lang)
     key = 'align_' + lang

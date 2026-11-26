@@ -251,6 +251,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 def main():
     server = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
     print("🎸 playalong.cz – pomocník běží")
+    try:
+        import queue_worker
+        queue_worker.start(download_audio)
+    except Exception as e:  # noqa: BLE001
+        print(f"   ✗ Fronta se nespustila: {e}")
     print(f"   Appka:   http://{HOST}:{PORT}/")
     print("   Ukončení: Ctrl+C nebo zavři tohle okno\n")
     try:

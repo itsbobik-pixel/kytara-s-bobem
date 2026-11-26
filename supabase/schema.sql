@@ -130,3 +130,35 @@ drop policy if exists "songs: smazat svoje nebo admin" on public.songs;
 create policy "songs: smazat svoje nebo admin" on public.songs
   for delete to authenticated
   using (public.is_admin() or (owner = auth.uid() and not approved));
+
+-- ---------- Fronta automatických časů (26. 11. 2026) ----------
+--  • web vloží úlohu (song + YouTube id), pomocník u admina ji zpracuje přes service role a RunPod (worker/)
+create table if not exists public.jobs (
+  id          uuid primary key default gen_random_uuid(),
+  song_id     text not null references public.songs (id) on delete cascade,
+  yt          text not null check (yt ~ '^[A-Za-z0-9_-]{11}$'),
+  status      text not null default 'queued' check (status in ('queued', 'working', 'done', 'error')),
+  created_by  uuid default auth.uid() references auth.users (id) on delete set null,
+  error       text,
+  stats       jsonb,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create unique index if not exists jobs_one_active_per_song on public.jobs (song_id) where status in ('queued', 'working');
+create index if not exists jobs_status_idx on public.jobs (status, created_at);
+alter table public.jobs enable row level security;
+create policy "jobs: číst" on public.jobs for select to anon, authenticated
+using (created_by = auth.uid() or public.is_admin() or exists (select 1 from public.songs s where s.id = song_id));
+create policy "jobs: přidat" on public.jobs for insert to authenticated
+with check (
+  created_by = auth.uid() and status = 'queued' and error is null and stats is null
+  and exists (select 1 from public.songs s where s.id = song_id and (s.owner = auth.uid() or public.is_admin()))
+);
+create policy "jobs: admin upravit" on public.jobs for update to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "jobs: admin smazat" on public.jobs for delete to authenticated using (public.is_admin());
+-- soukromý bucket (jen service role)
+insert into storage.buckets (id, name, public, file_size_limit) values ('jobs', 'jobs', false, 50000000) on conflict (id) do nothing;
+grant select on public.jobs to anon, authenticated;
+grant insert (song_id, yt) on public.jobs to authenticated;
+grant update, delete on public.jobs to authenticated;
+grant all on public.jobs to service_role;

@@ -17,6 +17,7 @@ window.KSB_SUPA = (() => {
   const editable = new Set(); // id songů v databázi, které smím upravit/smazat (i nenačtené)
   const loading = new Map();  // id → probíhající načítání celé písničky
   let timer = 0, flushing = false, again = false;
+  const jobs = new Map();     // song id → stav úlohy na automatické časy ('queued' | 'working')
 
   const payload = s => ({
     title: (s.title || '').slice(0, 200),
@@ -139,8 +140,16 @@ window.KSB_SUPA = (() => {
     }
   }
 
+  async function fetchJobs() {
+    const { data, error } = await sb.from('jobs').select('song_id, status').in('status', ['queued', 'working']);
+    if (error) return;
+    jobs.clear();
+    for (const j of data) jobs.set(j.song_id, j.status);
+  }
+
   async function reload({ quiet = false } = {}) {
     try {
+      fetchJobs();
       const list = await fetchSongs();
       songs = list;
       rememberSynced(list);
@@ -322,6 +331,34 @@ window.KSB_SUPA = (() => {
     setTimeout(() => input.select(), 30);
   }
 
+  // ---------- automatické časy (fronta) ----------
+  const jobStatus = id => jobs.get(id) || null;
+
+  /** zařadí song do fronty: pomocník stáhne YouTube a nechá spočítat časy na RunPodu */
+  async function requestJob(id, ytId) {
+    if (!auth.user) await signInAnon();
+    // song musí být v databázi (nový se ukládá se zpožděním)
+    schedule(0);
+    for (let i = 0; i < 40 && !inDb.has(id); i++) await new Promise(r => setTimeout(r, 250));
+    if (!inDb.has(id)) throw new Error('song není uložený');
+    const { error } = await sb.from('jobs').insert({ song_id: id, yt: ytId });
+    if (error && !/duplicate|unique/i.test(error.message)) throw error;
+    jobs.set(id, 'queued');
+  }
+
+  /** zjistí, jestli je úloha hotová; když ano, načte písničku znovu (s časy) */
+  async function checkJob(id) {
+    const { data } = await sb.from('jobs').select('status, error').eq('song_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (!data) { jobs.delete(id); return null; }
+    if (data.status === 'queued' || data.status === 'working') { jobs.set(id, data.status); return data.status; }
+    jobs.delete(id);
+    if (data.status === 'done') {
+      const i = songs.findIndex(x => x.id === id);
+      if (i >= 0) { songs[i].partial = true; synced.delete(id); await ensureLoaded(id); }
+    }
+    return data.status;
+  }
+
   /** host bez e-mailu: anonymní účet, aby mohl přidat song (ten pak čeká na schválení) */
   async function signInAnon() {
     const { data, error } = await sb.auth.signInAnonymously();
@@ -347,5 +384,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, requestJob, checkJob, jobStatus, importLocal, ensureLoaded, loadAll, approve };
 })();

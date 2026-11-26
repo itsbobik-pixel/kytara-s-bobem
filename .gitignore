@@ -4,3 +4,4 @@ __pycache__/
 helper/tmp/
 CLAUDE.md
 _test-local.html
+helper/secrets.json

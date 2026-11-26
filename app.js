@@ -656,7 +656,8 @@ function renderLibrary() {
           s.artist ? h('span', { class: 'sl-sep' }, ' – ') : null,
           h('span', { class: 'sl-title' }, s.title || 'Bez názvu'),
           s.isPublic === false ? h('span', { class: 'sl-lock', title: 'Vidíš jen ty' }, ' 🔒') : null,
-          auth.mode === 'supabase' && s.approved === false ? h('span', { class: 'sl-pending', title: 'Ostatní ho uvidí, až ho admin schválí' }, 'čeká na schválení') : null),
+          auth.mode === 'supabase' && s.approved === false ? h('span', { class: 'sl-pending', title: 'Ostatní ho uvidí, až ho admin schválí' }, 'čeká na schválení') : null,
+          auth.mode === 'supabase' && window.KSB_SUPA?.jobStatus(s.id) ? h('span', { class: 'sl-pending', title: 'Pomocník počítá časy pro Play Along' }, '⏳ Play Along se připravuje') : null),
         h('span', { class: 'sl-actions' },
           auth.admin && s.approved === false ? h('button', {
             class: 'sl-approve', title: 'Schválit – uvidí ho všichni',
@@ -840,6 +841,12 @@ function openSongModal(existing = null) {
     saveSongs();
     closeModal();
     go('#song-' + song.id);
+    const yt = typeof ytIdFrom === 'function' && st.audio?.yt ? ytIdFrom(st.audio.yt) : null;
+    if (yt && auth.mode === 'supabase') {
+      window.KSB_SUPA.requestJob(song.id, yt)
+        .then(() => toast('⏳ Play Along se připravuje – časy dopočítá pomocník.'))
+        .catch(e => console.warn('Fronta', e));
+    }
   }
 
   step1();
@@ -1040,6 +1047,61 @@ function keyPicker(key, onPick) {
 // =========================================================
 //  EDITOR / HRANÍ
 // =========================================================
+// ---------- Play Along: odkaz, nebo „vytvořit“ přes frontu (automatické časy) ----------
+let jobWatch = 0;
+function alongButton(song) {
+  const link = h('a', { class: 'btn al-btn', href: '#along-' + song.id, title: 'Play-along: hudba, text se přebarvuje podle zpěvu a akordy svítí' }, '🎸 Play-along');
+  const sup = auth.mode === 'supabase' && window.KSB_SUPA;
+  if (!sup || song.sync?.dur) return link;
+  if (sup.jobStatus(song.id)) {
+    watchJob(song);
+    return h('span', { class: 'btn al-btn', title: 'Pomocník stáhne nahrávku a spočítá časy slov a akordů. Obvykle pár minut.' }, '⏳ Play Along se připravuje…');
+  }
+  const mine = auth.admin || !song.owner || (auth.user && song.owner === auth.user.id);
+  if (!mine) return link;
+  return h('button', { class: 'btn al-btn', title: 'Vlož YouTube odkaz a časy slov a akordů se spočítají samy', onclick: e => askJob(e.currentTarget, song) }, '⏱ Vytvořit Play Along');
+}
+
+function askJob(anchor, song) {
+  const input = h('input', { type: 'url', placeholder: 'https://www.youtube.com/watch?v=…', value: song.sync?.yt ? 'https://youtu.be/' + song.sync.yt : '' });
+  const err = h('p', { class: 'form-err', role: 'alert' });
+  const btn = h('button', { class: 'btn primary' }, 'Vytvořit');
+  btn.onclick = async () => {
+    const id = ytIdFrom(input.value);
+    if (!id) { err.textContent = 'Tohle nevypadá jako odkaz na YouTube.'; return; }
+    btn.disabled = true; btn.textContent = 'Řadím do fronty…'; err.textContent = '';
+    try {
+      await window.KSB_SUPA.requestJob(song.id, id);
+      closePopover(); renderEditor();
+      toast('⏳ Hotovo za pár minut – Play Along se objeví sám.');
+    } catch (e) {
+      console.warn(e);
+      btn.disabled = false; btn.textContent = 'Vytvořit';
+      err.textContent = 'Nepovedlo se zařadit do fronty. Zkus to znovu.';
+    }
+  };
+  openPopover(anchor, h('div', { class: 'al-ytpop' },
+    h('b', {}, 'Vytvořit Play Along'),
+    h('p', { class: 'hint' }, 'Vlož odkaz na nahrávku na YouTube. Časy slov a akordů se spočítají samy, text se pak bude přebarvovat podle zpěvu.'),
+    input, err,
+    h('div', { class: 'modal-actions' }, h('button', { class: 'btn ghost', onclick: closePopover }, 'Zrušit'), btn)));
+  setTimeout(() => input.focus(), 30);
+}
+
+function watchJob(song) {
+  if (jobWatch) return;
+  jobWatch = setInterval(async () => {
+    const here = route.view === 'song' && route.id === song.id;
+    if (!here) { clearInterval(jobWatch); jobWatch = 0; return; }
+    const st = await window.KSB_SUPA.checkJob(song.id);
+    if (st === 'queued' || st === 'working') return;
+    clearInterval(jobWatch); jobWatch = 0;
+    if (st === 'done') toast('🎸 Play Along je hotový!');
+    else if (st === 'error') toast('Časy se nepodařilo spočítat. Zkus jiný odkaz nebo dej vědět adminovi.');
+    render();
+  }, 15000);
+}
+
 function renderEditor() {
   const song = current();
   if (!song) return;
@@ -1108,7 +1170,7 @@ function renderEditor() {
         toast(song.isPublic ? 'Song je veřejný' : 'Song vidíš jen ty');
       },
     }, ...(song.isPublic === false ? [ico('lock'), 'Jen pro mě'] : [ico('globe'), 'Veřejný'])),
-    play && h('a', { class: 'btn al-btn', href: '#along-' + song.id, title: 'Play-along: hudba, text se přebarvuje podle zpěvu a akordy svítí' }, '🎸 Play-along'),
+    play && alongButton(song),
     play
       ? (editable ? h('a', { class: 'btn primary', href: '#song-' + song.id }, '✎ Upravit') : null)
       : h('button', {
