@@ -32,7 +32,7 @@ MAX_SECONDS = 15 * 60                                  # delší videa nestahuje
 
 # Stránky, které se smí pomocníka ptát. Doplň sem svou GitHub Pages adresu, pokud ji změníš.
 ALLOWED_ORIGINS = re.compile(
-    r"^(null|https?://(localhost|127\.0\.0\.1)(:\d+)?|https://itsbobik-pixel\.github\.io)$"
+    r"^(null|https?://(localhost|127\.0\.0\.1)(:\d+)?|https://itsbobik-pixel\.github\.io|https://(www\.)?playalong\.cz)$"
 )
 # oddělené stopy a časy pro play-along: helper/tmp/stems/<id songu>/
 STEMS_DIR = ROOT / "helper" / "tmp" / "stems"
