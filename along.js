@@ -25,6 +25,31 @@ const AL = {
 };
 const r3 = x => Math.round(x * 1000) / 1000;
 
+/** začátky slabik ve slově (indexy znaků) – jednoduché české dělení: jádro = samohláska
+ *  nebo slabičné r/l mezi souhláskami; jedna souhláska mezi jádry jde k další slabice, víc → dělí se za první */
+function sylStarts(word) {
+  const lw = word.toLowerCase();
+  const isV = ch => /[aeiouyáéěíóúůý]/.test(ch);
+  const isL = ch => /[a-záčďéěíňóřšťúůýž]/.test(ch);
+  const nuc = [];
+  for (let i = 0; i < lw.length; i++) {
+    const ch = lw[i];
+    if (isV(ch)) { if (!nuc.length || nuc[nuc.length - 1].end !== i) nuc.push({ start: i, end: i + 1 }); else nuc[nuc.length - 1].end = i + 1; }
+    else if ((ch === 'r' || ch === 'l') && i > 0 && isL(lw[i - 1]) && !isV(lw[i - 1]) && (i + 1 >= lw.length || (isL(lw[i + 1]) && !isV(lw[i + 1]))))
+      nuc.push({ start: i, end: i + 1 });   // slabičné r/l: krk, vlk, srdce
+  }
+  if (nuc.length <= 1) return [0];
+  const starts = [0];
+  for (let n = 1; n < nuc.length; n++) {
+    // souhlásky mezi jádry („ch“ je jedno písmeno): jedna jde k další slabice, víc → dělí se za první
+    const from = nuc[n - 1].end, to = nuc[n].start;
+    const units = [];
+    for (let i = from; i < to; i++) { units.push(i); if (lw[i] === 'c' && lw[i + 1] === 'h' && i + 1 < to) i++; }
+    starts.push(units.length <= 1 ? (units[0] ?? to) : units[1]);
+  }
+  return starts;
+}
+
 // posun zobrazení dřív/později – zvlášť text a akordy (zpoždění sluchátek / reproduktoru / přepisu;
 // akordy kytarista potřebuje vidět chvilku před změnou). Uloží se v prohlížeči.
 const OFFS = {
@@ -594,11 +619,18 @@ function alTick(force) {
   // přebarvení po písmenkách v aktuálním řádku
   const r = cur >= 0 && AL.refs.lines[cur];
   if (r) {
-    const byWord = AL.sync?.highlight === 'word';   // zvýrazňovat celá slova najednou (jinak po písmenkách)
+    const mode = AL.sync?.highlight;   // 'word' = celá slova, 'syllable' = po slabikách, jinak po písmenkách
     for (const c of r.chars) {
       const w = c.w;
       const k = c.i - w.pos;
-      c.el.classList.toggle('on', byWord ? t >= w.s : t >= w.s + (w.e - w.s) * (k / Math.max(1, w.len)));
+      let on;
+      if (mode === 'word') on = t >= w.s;
+      else if (mode === 'syllable') {
+        if (!w.syl) w.syl = sylStarts(r.chars.filter(x => x.w === w).map(x => x.el.textContent).join(''));
+        const si = w.syl.filter(st => st <= k).length - 1;
+        on = t >= w.s + (w.e - w.s) * (Math.max(0, si) / w.syl.length);
+      } else on = t >= w.s + (w.e - w.s) * (k / Math.max(1, w.len));
+      c.el.classList.toggle('on', on);
     }
   }
   // akordy
