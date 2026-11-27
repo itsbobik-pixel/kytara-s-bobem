@@ -996,13 +996,14 @@ function relocateChord(L, c, t) {
   for (let i = 0; i < textLines.length; i++) {
     const X = textLines[i], next = textLines[i + 1];
     const first = X.words[0].s, end = wordEnd(X.words[X.words.length - 1]);
-    if (t < first - 0.05) {   // před prvním slovem tohoto řádku (a za koncem předchozího) → před text
+    if (t < first - 0.4) {   // v pauze před řádkem → před text (čím dřív, tím víc vlevo)
       tgt = X;
-      const ahead = first - t;
-      pos = -Math.min(8, Math.max(1, Math.round(ahead / 0.4)));
+      pos = -Math.min(8, Math.max(1, Math.round((first - t) / 0.4)));
       break;
     }
-    if (t <= end + 0.15 || !next) {   // uvnitř zpívaného řádku (nebo za posledním řádkem písně)
+    if (t < first) { tgt = X; pos = X.words[0].pos; break; }   // do 0,4 s před prvním slovem → začátek řádku
+    if (next && t >= next.words[0].s - 0.4) continue;          // patří už k dalšímu řádku (akord před zpěvem)
+    if (t <= end || !next) {   // řádek se v tu chvíli zpívá (nebo je to konec písně)
       tgt = X;
       pos = X.words[0].pos;
       for (const w of X.words) {
@@ -1010,6 +1011,7 @@ function relocateChord(L, c, t) {
       }
       break;
     }
+    // jinak je to pauza za řádkem → vyřeší další řádek (před text)
   }
   if (!tgt) return;
   const tl = song.lines[tgt.li];
