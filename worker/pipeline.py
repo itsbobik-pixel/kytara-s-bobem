@@ -338,7 +338,7 @@ def chord_items(lines, wsync, step=2.0):
             if words:
                 p = max(0, c['pos'])
                 t = words[0][2]
-                for pos, ln, s, e in words:
+                for pos, ln, s, e, *_ in words:
                     if pos <= p:
                         t = s + (e - s) * min(1.0, (p - pos) / max(1, ln)) if p < pos + ln + 1 else e
                 if c['pos'] < 0:          # akord před textem: o něco dřív
