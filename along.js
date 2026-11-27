@@ -805,11 +805,12 @@ function renderTimeline() {
   for (const L of AL.model.lines) {
     const line = song.lines[L.li];
     if (L.s != null && L.e != null && L.e >= t0 && L.s <= t1 && L.words.length) {
-      items.append(tlItem('line', L, null, tlX(L.s), Math.max(8, tlX(L.e) - tlX(L.s)), line.text.slice(0, 60)));
+      const le = L.words.length ? Math.max(...L.words.map(wordEnd)) : L.e;
+      items.append(tlItem('line', L, null, tlX(L.s), Math.max(8, tlX(le) - tlX(L.s)), line.text.slice(0, 60)));
     }
     for (const w of L.words) {
       if (w.e < t0 || w.s > t1) continue;
-      items.append(tlItem('word', L, w, tlX(w.s), Math.max(6, tlX(w.e) - tlX(w.s)), line.text.substr(w.pos, w.len)));
+      items.append(tlItem('word', L, w, tlX(w.s), Math.max(6, tlX(wordEnd(w)) - tlX(w.s)), line.text.substr(w.pos, w.len)));
     }
   }
   const allCh = AL.model.chords;
@@ -979,28 +980,39 @@ function tlTap(free) {
   renderAlongBody();
 }
 
+/** reálný konec zpívání slova (konce posledních slov řádku bývají v datech protažené přes držený tón / pauzu) */
+const wordEnd = w => w.s + Math.min(w.e - w.s, 0.1 * w.len + 0.2);
+
 /** akord posunutý v čase přesune i v textu: nad slovo (místo ve slově), které se v tu chvíli zpívá,
  *  případně na sousední řádek. Mezihry (řádky bez textu) se nemění. */
 function relocateChord(L, c, t) {
   const song = current();   // skutečná písnička (ne zobrazení s kapodastrem)
   const src = song.lines[L.li];
   if (!src || !src.text.trim()) return;
-  // řádek s textem, do kterého čas spadá (od začátku prvního slova do začátku dalšího řádku)
+  // řádek s textem: zpívaný úsek řádku [první slovo, reálný konec posledního slova];
+  // čas v pauze za koncem řádku patří PŘED text dalšího řádku (akord přichází před zpěvem)
   const textLines = AL.model.lines.filter(x => x.words.length && song.lines[x.li]?.text.trim());
-  let tgt = null;
+  let tgt = null, pos = null;
   for (let i = 0; i < textLines.length; i++) {
     const X = textLines[i], next = textLines[i + 1];
-    const from = X.words[0].s - (i === 0 ? 99 : 0.4);
-    const to = next ? next.words[0].s - 0.4 : X.words[X.words.length - 1].e + 2;
-    if (t >= from && t < to) { tgt = X; break; }
+    const first = X.words[0].s, end = wordEnd(X.words[X.words.length - 1]);
+    if (t < first - 0.05) {   // před prvním slovem tohoto řádku (a za koncem předchozího) → před text
+      tgt = X;
+      const ahead = first - t;
+      pos = -Math.min(8, Math.max(1, Math.round(ahead / 0.4)));
+      break;
+    }
+    if (t <= end + 0.15 || !next) {   // uvnitř zpívaného řádku (nebo za posledním řádkem písně)
+      tgt = X;
+      pos = X.words[0].pos;
+      for (const w of X.words) {
+        if (w.s <= t + 0.03) pos = w.pos + Math.min(w.len - 1, Math.max(0, Math.round((t - w.s) / Math.max(0.05, wordEnd(w) - w.s) * w.len)));
+      }
+      break;
+    }
   }
   if (!tgt) return;
   const tl = song.lines[tgt.li];
-  // místo v textu: slovo, které už začalo (poměrně uvnitř slova); před prvním slovem = jeho začátek
-  let pos = tgt.words[0].pos;
-  for (const w of tgt.words) {
-    if (w.s <= t + 0.03) pos = w.pos + Math.min(w.len - 1, Math.max(0, Math.round((t - w.s) / Math.max(0.05, w.e - w.s) * w.len)));
-  }
   const srcSl = AL.sync.lines[L.li];
   const entry = srcSl.c.find(x => x[0] === c.pos);
   const chObj = src.chords.find(x => x.pos === c.pos);
@@ -1008,7 +1020,8 @@ function relocateChord(L, c, t) {
   const tgtSl = AL.sync.lines[tgt.li] || (AL.sync.lines[tgt.li] = { w: [], c: [] });
   // volné místo (na stejném znaku nesmí být dva akordy)
   const taken = new Set(tl.chords.filter(x => !(tgt.li === L.li && x === chObj)).map(x => x.pos));
-  while (taken.has(pos)) pos++;
+  while (taken.has(pos)) pos += pos < 0 ? -1 : 1;
+  if (pos < -8) return;
   if (tgt.li === L.li && pos === chObj.pos) return;
   if (tgt.li !== L.li) {
     // akordy cílového řádku si nejdřív uloží svůj čas (ať se nehnou)
