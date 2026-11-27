@@ -835,3 +835,6 @@ body.al-editing .al-yt { bottom: 236px; }
 .google-btn .g-logo { font-weight: 800; background: conic-gradient(from -45deg, #ea4335 0 25%, #fbbc05 0 50%, #34a853 0 75%, #4285f4 0); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 18px; }
 .modal .or { text-align: center; color: var(--muted); font-size: 13px; margin: 10px 0 4px; }
 .g-box { display: flex; justify-content: center; min-height: 44px; margin: 6px 0 2px; }
+/* odkazové tlačítko (přihlášení: registrace / zapomenuté heslo) */
+.linkish { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.linkish:hover { color: var(--ink, inherit); }

@@ -607,11 +607,7 @@ function renderLibrary() {
   app.innerHTML = '';
   document.body.classList.remove('playing');
   const shared = auth.mode === 'supabase';
-  renderTopActions([
-    // záloha / nahrání jen ve verzi bez účtu (artefakt); společný zpěvník se zálohuje v databázi
-    !shared && h('button', { class: 'btn ghost', onclick: exportSongs, title: 'Stáhnout zálohu songů' }, '⬇ Záloha'),
-    !shared && h('button', { class: 'btn ghost', onclick: importSongs, title: 'Nahrát zálohu' }, '⬆ Nahrát'),
-  ]);
+  renderTopActions();
 
   const addSong = async () => {
     // přidat může i nepřihlášený: dostane anonymní účet, song čeká na schválení adminem
@@ -681,6 +677,9 @@ function renderLibrary() {
           h('span', { class: 'sl-title' }, s.title || 'Bez názvu'),
           s.isPublic === false ? h('span', { class: 'sl-lock', title: 'Vidíš jen ty' }, ' 🔒') : null,
           auth.mode === 'supabase' && s.approved === false ? h('span', { class: 'sl-pending', title: 'Ostatní ho uvidí, až ho admin schválí' }, 'čeká na schválení') : null,
+          auth.mode === 'supabase' && s.approved === false && window.KSB_SUPA?.jobFit(s.id) != null ? h('span', {
+            class: 'sl-pending', title: 'Kolik slov z textu se našlo v nahrávce (Play Along). Pod 85 % bývá jiná verze textu nebo videa.',
+          }, `Play Along ${window.KSB_SUPA.jobFit(s.id)} %`) : null,
           auth.mode === 'supabase' && window.KSB_SUPA?.jobStatus(s.id) ? h('span', { class: 'sl-pending', title: 'Pomocník počítá časy pro Play Along' }, '⏳ Play Along se připravuje') : null),
         h('span', { class: 'sl-actions' },
           auth.admin && s.approved === false ? h('button', {

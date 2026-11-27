@@ -142,17 +142,23 @@ window.KSB_SUPA = (() => {
     }
   }
 
+  const fits = new Map();      // song id → % slov textu nalezených v nahrávce (poslední hotová úloha)
   async function fetchJobs() {
-    const { data, error } = await sb.from('jobs').select('song_id, status').in('status', ['queued', 'working']);
+    const { data, error } = await sb.from('jobs').select('song_id, status, stats, created_at')
+      .in('status', ['queued', 'working', 'done']).order('created_at', { ascending: true });
     if (error) return;
-    jobs.clear();
-    for (const j of data) jobs.set(j.song_id, j.status);
+    jobs.clear(); fits.clear();
+    for (const j of data) {
+      if (j.status === 'done') {
+        const st = j.stats || {};
+        if (st.ours) fits.set(j.song_id, Math.round(100 * st.matched / st.ours));
+      } else jobs.set(j.song_id, j.status);
+    }
   }
 
   async function reload({ quiet = false } = {}) {
     try {
-      fetchJobs();
-      const list = await fetchSongs();
+      const [list] = await Promise.all([fetchSongs(), fetchJobs()]);
       songs = list;
       rememberSynced(list);
       auth.loading = false;
@@ -182,6 +188,7 @@ window.KSB_SUPA = (() => {
     // Pozor: uvnitř onAuthStateChange se nesmí čekat na další volání Supabase (zasekne se zámek
     // přihlášení a např. updateUser nikdy nedoběhne) → práci odložíme mimo callback.
     sb.auth.onAuthStateChange((event, sess) => {
+      if (event === 'PASSWORD_RECOVERY') { setTimeout(openNewPassword, 0); return; }
       if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'USER_UPDATED') return;
       setTimeout(async () => {
         const before = auth.user?.id;
@@ -247,73 +254,141 @@ window.KSB_SUPA = (() => {
     }
   }
 
-  // ---------- přihlášení ----------
-  function openLogin(reason) {
+  // ---------- přihlášení / registrace (Google nebo e-mail + heslo) ----------
+  const backUrl = () => location.origin + location.pathname;
+  function openLogin(reason, startMode = 'login') {
     const root = $('#modalRoot');
-    const st = { email: '', sent: false, busy: false };
+    const st = { mode: startMode, name: '', email: '', pass: '', busy: false };
     const back = h('div', { class: 'modal-back', onpointerdown: e => { if (e.target === back) closeModal(); } });
     const modal = h('div', { class: 'modal narrow', role: 'dialog', 'aria-modal': 'true' });
     back.append(modal);
     root.innerHTML = '';
     root.append(back);
 
+    const msg = (title, text) => {
+      modal.innerHTML = '';
+      modal.append(h('h2', {}, title), h('p', { class: 'sub' }, text),
+        h('div', { class: 'modal-actions' }, h('span'), h('button', { class: 'btn primary', onclick: closeModal }, 'Jasně')));
+    };
+
     const draw = () => {
       modal.innerHTML = '';
-      if (st.sent) {
-        modal.append(
-          h('h2', {}, 'Mrkni do e-mailu 📬'),
-          h('p', { class: 'sub' }, `Poslal jsem odkaz na ${st.email}. Otevři ho ve stejném prohlížeči a budeš přihlášený.`),
-          h('div', { class: 'modal-actions' }, h('span'), h('button', { class: 'btn primary', onclick: closeModal }, 'Jasně')));
-        return;
-      }
-      const input = h('input', { id: 'loginEmail', type: 'email', required: true, autocomplete: 'email', placeholder: 'tvuj@email.cz', value: st.email, oninput: e => (st.email = e.target.value) });
+      const reg = st.mode === 'register', forgot = st.mode === 'forgot';
       const err = h('p', { class: 'form-err', role: 'alert' });
+      const field = (label, attrs, key) => h('label', { class: 'field' }, h('span', {}, label),
+        h('input', { ...attrs, value: st[key], oninput: e => (st[key] = e.target.value) }));
+      const nameIn = field('Přezdívka', { maxlength: 40, required: true, autocomplete: 'nickname', placeholder: 'Jak ti říkat' }, 'name');
+      const emailIn = field('E-mail', { type: 'email', required: true, autocomplete: 'email', placeholder: 'tvuj@email.cz' }, 'email');
+      const passIn = field('Heslo', { type: 'password', required: true, minlength: 6, autocomplete: reg ? 'new-password' : 'current-password', placeholder: reg ? 'aspoň 6 znaků' : '' }, 'pass');
+
       // tlačítko od Googlu (přihlášení přímo na playalong.cz); když se nenačte, záložní přesměrování přes Supabase
       const gbox = h('div', { class: 'g-box' });
-      const fallback = () => {
-        gbox.innerHTML = '';
-        gbox.append(h('button', {
-          class: 'btn google-btn', type: 'button',
-          onclick: async () => {
-            const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
-            if (error) err.textContent = 'Přihlášení přes Google teď nejde. Zkus e-mail.';
-          },
-        }, h('b', { class: 'g-logo' }, 'G'), 'Přihlásit přes Google'));
-      };
-      setTimeout(() => mountGoogleButton(gbox, () => { err.textContent = 'Přihlášení přes Google se nepovedlo. Zkus to znovu nebo e-mailem.'; })
-        .catch(fallback), 0);
-      modal.append(h('form', {
-        onsubmit: async e => {
-          e.preventDefault();
-          if (st.busy) return;
-          st.busy = true;
-          const { error } = await sb.auth.signInWithOtp({
-            email: st.email.trim(),
-            options: { emailRedirectTo: location.origin + location.pathname },
-          });
-          st.busy = false;
-          if (error) {
-            err.textContent = /rate|seconds/i.test(error.message)
-              ? 'Moc pokusů za sebou. Zkus to za minutu.'
-              : 'Odkaz se nepodařilo poslat. Zkontroluj e-mail a zkus to znovu.';
-            return;
+      if (!forgot) {
+        const fallback = () => {
+          gbox.innerHTML = '';
+          gbox.append(h('button', {
+            class: 'btn google-btn', type: 'button',
+            onclick: async () => {
+              const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: backUrl() } });
+              if (error) err.textContent = 'Přihlášení přes Google teď nejde. Zkus e-mail.';
+            },
+          }, h('b', { class: 'g-logo' }, 'G'), 'Pokračovat přes Google'));
+        };
+        setTimeout(() => mountGoogleButton(gbox, () => { err.textContent = 'Přihlášení přes Google se nepovedlo. Zkus to znovu nebo e-mailem.'; }, reg)
+          .catch(fallback), 0);
+      }
+
+      const submit = async e => {
+        e.preventDefault();
+        if (st.busy) return;
+        st.busy = true; err.textContent = '';
+        const email = st.email.trim();
+        try {
+          if (forgot) {
+            const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: backUrl() });
+            if (error) throw error;
+            msg('Mrkni do e-mailu 📬', `Poslal jsem odkaz na nastavení hesla na ${email}. Otevři ho ve stejném prohlížeči.`);
+          } else if (reg) {
+            const name = st.name.trim().slice(0, 40);
+            if (!name) { err.textContent = 'Napiš nějakou přezdívku.'; return; }
+            let res;
+            if (auth.anon) {
+              // host (přidal songy bez účtu) → z anonymního účtu udělat normální, songy mu zůstanou
+              res = await sb.auth.updateUser({ email, password: st.pass, data: { name } }, { emailRedirectTo: backUrl() });
+            } else {
+              res = await sb.auth.signUp({ email, password: st.pass, options: { data: { name }, emailRedirectTo: backUrl() } });
+              if (!res.error && res.data?.user && !res.data.user.identities?.length) {
+                err.textContent = 'Tenhle e-mail už je registrovaný. Přihlas se, nebo si nech poslat nové heslo.';
+                return;
+              }
+            }
+            if (res.error) throw res.error;
+            if (res.data?.session && !auth.anon) { closeModal(); toast(`Vítej, ${name}! 🎸`); return; }
+            msg('Potvrď registraci 📬', `Poslal jsem e-mail na ${email}. Klikni v něm na odkaz a budeš přihlášený.`);
+          } else {
+            const { error } = await sb.auth.signInWithPassword({ email, password: st.pass });
+            if (error) throw error;
+            closeModal();
+            toast('Přihlášeno ✓');
           }
-          st.sent = true; draw();
-        },
-      },
-        h('h2', {}, 'Přihlásit se'),
-        h('p', { class: 'sub' }, reason || 'Přihlášení potřebuješ, abys mohl přidávat a upravovat songy. Číst může kdokoli.'),
-        gbox,
-        h('p', { class: 'or' }, 'nebo e-mailem'),
-        h('label', { class: 'field' }, h('span', {}, 'E-mail'), input),
-        h('p', { class: 'hint' }, 'Žádné heslo: pošlu ti odkaz, kterým se přihlásíš.'),
+        } catch (ex) {
+          const m = String(ex?.message || ex);
+          err.textContent =
+            /invalid login|invalid credentials/i.test(m) ? 'Špatný e-mail nebo heslo. Když ses dřív přihlašoval odkazem z e-mailu, heslo ještě nemáš – klikni na „Zapomenuté heslo“.'
+            : /not confirmed/i.test(m) ? 'E-mail ještě není potvrzený. Klikni na odkaz, který ti přišel po registraci.'
+            : /already|registered|exists/i.test(m) ? 'Tenhle e-mail už je registrovaný. Přihlas se, nebo si nech poslat nové heslo.'
+            : /password/i.test(m) && /6|short|weak/i.test(m) ? 'Heslo je moc krátké nebo slabé (aspoň 6 znaků).'
+            : /rate|seconds|too many/i.test(m) ? 'Moc pokusů za sebou. Zkus to za minutu.'
+            : 'Něco se nepovedlo. Zkus to znovu.';
+        } finally { st.busy = false; }
+      };
+
+      const link = (text, mode) => h('button', { class: 'linkish', type: 'button', onclick: () => { st.mode = mode; draw(); } }, text);
+      modal.append(h('form', { onsubmit: submit },
+        h('h2', {}, forgot ? 'Zapomenuté heslo' : reg ? 'Registrace' : 'Přihlásit se'),
+        h('p', { class: 'sub' }, forgot ? 'Pošlu ti odkaz, kterým si nastavíš nové heslo.'
+          : reason || (reg ? 'Účet potřebuješ, abys mohl přidávat a upravovat songy. Číst může kdokoli.'
+            : 'Přihlášení potřebuješ, abys mohl přidávat a upravovat songy. Číst může kdokoli.')),
+        !forgot && gbox,
+        !forgot && h('p', { class: 'or' }, 'nebo e-mailem'),
+        reg && nameIn,
+        emailIn,
+        !forgot && passIn,
+        !reg && !forgot && h('p', { class: 'hint' }, link('Zapomenuté heslo?', 'forgot')),
         err,
         h('div', { class: 'modal-actions' },
-          h('button', { class: 'btn ghost', type: 'button', onclick: closeModal }, 'Zrušit'),
-          h('button', { class: 'btn primary', type: 'submit' }, 'Poslat odkaz'))));
-      setTimeout(() => input.focus(), 30);
+          forgot ? link('← Zpět na přihlášení', 'login')
+            : reg ? link('Už mám účet – přihlásit', 'login') : link('Nemám účet – registrace', 'register'),
+          h('button', { class: 'btn primary', type: 'submit' }, forgot ? 'Poslat odkaz' : reg ? 'Zaregistrovat' : 'Přihlásit'))));
+      setTimeout(() => modal.querySelector(reg ? 'input' : 'input[type=email]')?.focus(), 30);
     };
     draw();
+  }
+
+  /** po kliknutí na odkaz „nové heslo“ z e-mailu */
+  function openNewPassword() {
+    const root = $('#modalRoot');
+    let pass = '';
+    const err = h('p', { class: 'form-err', role: 'alert' });
+    const back = h('div', { class: 'modal-back' });
+    back.append(h('div', { class: 'modal narrow', role: 'dialog', 'aria-modal': 'true' },
+      h('form', {
+        onsubmit: async e => {
+          e.preventDefault();
+          if (pass.length < 6) { err.textContent = 'Aspoň 6 znaků.'; return; }
+          const { error } = await sb.auth.updateUser({ password: pass });
+          if (error) { err.textContent = 'Heslo se nepodařilo uložit. Zkus to znovu.'; return; }
+          closeModal(); toast('Heslo nastavené ✓');
+        },
+      },
+        h('h2', {}, 'Nové heslo'),
+        h('p', { class: 'sub' }, 'Vymysli si heslo, kterým se budeš přihlašovat.'),
+        h('label', { class: 'field' }, h('span', {}, 'Heslo'),
+          h('input', { type: 'password', minlength: 6, required: true, autocomplete: 'new-password', placeholder: 'aspoň 6 znaků', oninput: e => (pass = e.target.value) })),
+        err,
+        h('div', { class: 'modal-actions' }, h('span'), h('button', { class: 'btn primary', type: 'submit' }, 'Uložit heslo')))));
+    root.innerHTML = '';
+    root.append(back);
   }
 
   // ---------- Google (Google Identity Services → Supabase signInWithIdToken) ----------
@@ -331,7 +406,7 @@ window.KSB_SUPA = (() => {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
   }
-  async function mountGoogleButton(box, onError) {
+  async function mountGoogleButton(box, onError, signup = false) {
     if (!cfg.googleClientId || !crypto?.subtle) throw new Error('google nejde');
     await loadGsi();
     const raw = crypto.randomUUID() + crypto.randomUUID();
@@ -346,7 +421,7 @@ window.KSB_SUPA = (() => {
       },
     });
     box.innerHTML = '';
-    google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'cs', width: Math.min(360, box.clientWidth || 320) });
+    google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', shape: 'pill', text: signup ? 'signup_with' : 'continue_with', locale: 'cs', width: Math.min(360, box.clientWidth || 320) });
   }
 
   function openNameModal() {
@@ -384,6 +459,7 @@ window.KSB_SUPA = (() => {
 
   // ---------- automatické časy (fronta) ----------
   const jobStatus = id => jobs.get(id) || null;
+  const jobFit = id => fits.get(id) ?? null;
 
   /** zařadí song do fronty: pomocník stáhne YouTube a nechá spočítat časy na RunPodu */
   async function requestJob(id, ytId) {
@@ -440,5 +516,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, requestJob, checkJob, jobStatus, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
 })();
