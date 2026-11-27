@@ -217,6 +217,29 @@ def track_beats(env, period, oh=0.01, tight=6.0):
     return np.array(beats[::-1])
 
 
+def smooth_beats(beats, half=8, iters=3):
+    """vyhlazení mřížky dob: každá doba = robustní proložení přímkou přes okolních ±half dob
+    (ujeté údery – činel, přírazy – se při proložení vyřadí); tempo se může měnit, ale pozvolna"""
+    b = np.asarray(beats, dtype=float)
+    n = len(b)
+    if n < 6:
+        return b
+    k = np.arange(n, dtype=float)
+    out = b.copy()
+    for i in range(n):
+        lo, hi = max(0, i - half), min(n, i + half + 1)
+        kk, tt = k[lo:hi], b[lo:hi]
+        w = np.ones_like(tt)
+        for _ in range(iters):
+            A = np.vstack([kk, np.ones_like(kk)]).T * w[:, None]
+            p, q = np.linalg.lstsq(A, tt * w, rcond=None)[0]
+            r = tt - (p * kk + q)
+            s = np.median(np.abs(r)) * 1.5 + 1e-3
+            w = 1.0 / np.maximum(1.0, np.abs(r) / (2.5 * s))   # Huber: velké odchylky menší váhu
+        out[i] = p * i + q
+    return np.maximum.accumulate(out)   # nikdy pozpátku
+
+
 # ---------------------------------------------------------------- akordy
 def chroma(x):
     N = 8192
@@ -437,7 +460,7 @@ def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print
     C = chroma(inst) if any(l.get('chords') for l in lines) else None
     best = None
     for per in periods:
-        bts = track_beats(env, per)
+        bts = smooth_beats(track_beats(env, per))
         its = chord_items(lines, words, step=2 * float(np.median(np.diff(bts))))   # bez textu: ~2 doby na akord
         if not its or C is None:
             best = best or (bts, its, None, 0, None, -1e9)
