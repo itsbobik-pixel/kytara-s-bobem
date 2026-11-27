@@ -608,8 +608,9 @@ function renderLibrary() {
   document.body.classList.remove('playing');
   const shared = auth.mode === 'supabase';
   renderTopActions([
-    canCreate() && !auth.anon && h('button', { class: 'btn ghost', onclick: exportSongs, title: 'Stáhnout zálohu songů' }, '⬇ Záloha'),
-    canCreate() && !auth.anon && h('button', { class: 'btn ghost', onclick: importSongs, title: 'Nahrát zálohu' }, '⬆ Nahrát'),
+    // záloha / nahrání jen ve verzi bez účtu (artefakt); společný zpěvník se zálohuje v databázi
+    !shared && h('button', { class: 'btn ghost', onclick: exportSongs, title: 'Stáhnout zálohu songů' }, '⬇ Záloha'),
+    !shared && h('button', { class: 'btn ghost', onclick: importSongs, title: 'Nahrát zálohu' }, '⬆ Nahrát'),
   ]);
 
   const addSong = async () => {

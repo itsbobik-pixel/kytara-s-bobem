@@ -268,6 +268,20 @@ window.KSB_SUPA = (() => {
       }
       const input = h('input', { id: 'loginEmail', type: 'email', required: true, autocomplete: 'email', placeholder: 'tvuj@email.cz', value: st.email, oninput: e => (st.email = e.target.value) });
       const err = h('p', { class: 'form-err', role: 'alert' });
+      // tlačítko od Googlu (přihlášení přímo na playalong.cz); když se nenačte, záložní přesměrování přes Supabase
+      const gbox = h('div', { class: 'g-box' });
+      const fallback = () => {
+        gbox.innerHTML = '';
+        gbox.append(h('button', {
+          class: 'btn google-btn', type: 'button',
+          onclick: async () => {
+            const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+            if (error) err.textContent = 'Přihlášení přes Google teď nejde. Zkus e-mail.';
+          },
+        }, h('b', { class: 'g-logo' }, 'G'), 'Přihlásit přes Google'));
+      };
+      setTimeout(() => mountGoogleButton(gbox, () => { err.textContent = 'Přihlášení přes Google se nepovedlo. Zkus to znovu nebo e-mailem.'; })
+        .catch(fallback), 0);
       modal.append(h('form', {
         onsubmit: async e => {
           e.preventDefault();
@@ -289,13 +303,7 @@ window.KSB_SUPA = (() => {
       },
         h('h2', {}, 'Přihlásit se'),
         h('p', { class: 'sub' }, reason || 'Přihlášení potřebuješ, abys mohl přidávat a upravovat songy. Číst může kdokoli.'),
-        h('button', {
-          class: 'btn google-btn', type: 'button',
-          onclick: async () => {
-            const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
-            if (error) err.textContent = 'Přihlášení přes Google teď nejde. Zkus e-mail.';
-          },
-        }, h('b', { class: 'g-logo' }, 'G'), 'Přihlásit přes Google'),
+        gbox,
         h('p', { class: 'or' }, 'nebo e-mailem'),
         h('label', { class: 'field' }, h('span', {}, 'E-mail'), input),
         h('p', { class: 'hint' }, 'Žádné heslo: pošlu ti odkaz, kterým se přihlásíš.'),
@@ -306,6 +314,39 @@ window.KSB_SUPA = (() => {
       setTimeout(() => input.focus(), 30);
     };
     draw();
+  }
+
+  // ---------- Google (Google Identity Services → Supabase signInWithIdToken) ----------
+  let gsiLoading = null;
+  function loadGsi() {
+    if (window.google?.accounts?.id) return Promise.resolve();
+    return gsiLoading || (gsiLoading = new Promise((ok, fail) => {
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+      s.onload = ok; s.onerror = () => { gsiLoading = null; fail(new Error('gsi')); };
+      document.head.append(s);
+    }));
+  }
+  async function sha256hex(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  async function mountGoogleButton(box, onError) {
+    if (!cfg.googleClientId || !crypto?.subtle) throw new Error('google nejde');
+    await loadGsi();
+    const raw = crypto.randomUUID() + crypto.randomUUID();
+    google.accounts.id.initialize({
+      client_id: cfg.googleClientId,
+      nonce: await sha256hex(raw),
+      callback: async r => {
+        const { error } = await sb.auth.signInWithIdToken({ provider: 'google', token: r.credential, nonce: raw });
+        if (error) { console.warn('Google', error); onError(error); return; }
+        closeModal();
+        toast('Přihlášeno přes Google ✓');
+      },
+    });
+    box.innerHTML = '';
+    google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'cs', width: Math.min(360, box.clientWidth || 320) });
   }
 
   function openNameModal() {
