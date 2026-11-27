@@ -162,3 +162,4 @@ grant select on public.jobs to anon, authenticated;
 grant insert (song_id, yt) on public.jobs to authenticated;
 grant update, delete on public.jobs to authenticated;
 grant all on public.jobs to service_role;
+grant select, update on public.songs to service_role;
