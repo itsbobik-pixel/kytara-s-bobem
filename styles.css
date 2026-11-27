@@ -878,3 +878,18 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .fac-metro i:first-child { border-color: var(--d0); }
 .fac-metro i.on { background: var(--d1); border-color: var(--d1); }
 .fac-metro i:first-child.on { background: var(--d0); border-color: var(--d0); }
+/* továrna v panelu editoru časů */
+.al-tl .fac-panel { margin: 0 0 6px; padding: 0 0 6px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; }
+.al-tl .fac-steps { margin-bottom: 4px; gap: 6px; }
+.al-tl .fac-step { padding: 3px 12px; font-size: 13px; }
+.al-tl .fac-row { gap: 8px; margin: 2px 0 4px; }
+.al-tl .fac-tap { font-size: 15px; padding: 6px 22px; }
+.al-tl .fac-body .tl-hint { display: block; }
+.fac-line { max-width: 28em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tgroup button.fac-ok:not(:disabled) { background: var(--d2); color: var(--d2-ink); font-weight: 700; }
+.fac-start { top: 0; bottom: 0; width: 2px; padding: 0; border-radius: 0; background: var(--d0); overflow: visible; cursor: ew-resize; z-index: 6; }
+.fac-start span { position: absolute; top: 0; left: 2px; background: var(--d0); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 0 6px 6px 0; white-space: nowrap; }
+.fac-start::before { content: ""; position: absolute; top: 0; bottom: 0; left: -6px; width: 14px; }
+.tl-chord.fac-next { outline: 3px solid var(--d0); outline-offset: 1px; z-index: 5; animation: facPulse 1s ease-in-out infinite; }
+@keyframes facPulse { 50% { outline-color: transparent; } }
+.fac-body .chord { position: static; display: inline-block; transform: none; font-size: 18px; }

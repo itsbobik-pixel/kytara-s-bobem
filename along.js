@@ -448,6 +448,7 @@ function renderAlongBody() {
   if (!song || !app) return;
   const editable = canEdit(song);
   if (!editable) AL.edit = false;
+  if (AL.factory && editable && AL.sync) AL.edit = true;   // továrna = vždy v editoru časů
   const ready = alReady();
   document.body.classList.toggle('al-editing', AL.edit);
   app.innerHTML = '';
@@ -493,7 +494,6 @@ function renderAlongBody() {
       AL.edit ? h('button', { id: 'alUndo', class: 'tbtn', onclick: alUndo, disabled: !AL.undo.length, title: 'Vrátit poslední posun (Ctrl+Z)' }, '↶ Zpět') : null));
 
   const ed = h('div', { class: 'editor play along' + (AL.edit ? ' al-editing' : '') }, bar);
-  if (AL.factory && editable && AL.sync && typeof factoryPanel === 'function') ed.append(factoryPanel(current()));
 
   if (AL.loading) {
     ed.append(h('div', { class: 'empty' }, h('div', { class: 'big-emoji' }, '🎧'), h('h2', {}, 'Načítám zvuk…')));
@@ -523,7 +523,11 @@ function renderAlongBody() {
 
   const sheet = h('div', { class: 'sheet al-sheet', id: 'alSheet' });
   ed.append(h('div', { class: 'sheet-wrap' }, sheet));
-  if (AL.edit) ed.append(renderTimelineShell());
+  if (AL.edit) {
+    const tl = renderTimelineShell();
+    if (AL.factory && typeof factoryPanel === 'function') tl.prepend(factoryPanel(current()));
+    ed.append(tl);
+  }
   app.append(ed);
 
   renderAlongSheet(sheet);
@@ -710,19 +714,19 @@ function renderTimelineShell() {
         h('button', { title: 'Přehrát / pauza (mezerník)', id: 'tlPlay', onclick: () => alToggle() }, AL.playing ? '⏸' : '▶'),
         h('button', { title: 'Stop – zastavit a vrátit na začátek', onclick: () => { alPause(); alSeek(0); } }, '⏹'),
         h('button', { title: 'O 5 s dál', onclick: () => alSeek(alNow() + 5) }, '+5 s')),
-      h('span', { class: 'tl-hint' }, 'Táhni akord, slovo nebo řádek (Shift = opačně než 🧲). Vybraný akord: ←/→ posun. Klik do prázdna = skok.'),
+      AL.factory ? h('span', { class: 'tl-hint' }) : h('span', { class: 'tl-hint' }, 'Táhni akord, slovo nebo řádek (Shift = opačně než 🧲). Vybraný akord: ←/→ posun. Klik do prázdna = skok.'),
       h('button', {
         class: 'tbtn' + (tlSnapOn() ? ' on' : ''),
         title: 'Přicvakávat akordy na doby (tažení, šipky, ťukání). Vypnuto = volně, šipky po 0,05 s.',
         onclick: () => { try { localStorage.setItem('ksb.along.snap', tlSnapOn() ? '0' : '1'); } catch { /* nic */ } renderAlongBody(); },
       }, tlSnapOn() ? '🧲 Na doby: zap' : '🧲 Na doby: vyp'),
-      h('button', {
+      AL.factory ? null : h('button', {
         class: 'tbtn' + (AL.tap ? ' on' : ''), id: 'tlTap',
         title: 'Ťukání: pusť písničku a při každé změně akordu zmáčkni J – nejbližší akord skočí na ten okamžik (na dobu)',
         onclick: () => { AL.tap = !AL.tap; AL.tapped = new Set(); renderAlongBody(); },
       }, AL.tap ? '⌨ Ťukání: J' : '⌨ Ťukat akordy'),
       // ťukání prvních dob taktu → z nich se složí mřížka
-      AL.barTaps
+      AL.factory ? null : AL.barTaps
         ? h('div', { class: 'tgroup tl-bartap' },
             h('span', { class: 'al-lead', id: 'tlBarCount' }, `🥁 K = 1. doba (${AL.barTaps.length})`),
             h('button', { title: 'Metrum', onclick: () => { AL.barMeter = AL.barMeter === 3 ? 4 : 3; renderAlongBody(); } }, (AL.barMeter || 4) + '/4'),
@@ -819,6 +823,7 @@ function renderTimeline() {
 
   items.innerHTML = '';
   const t0 = AL.view0 - 1, t1 = AL.view0 + AL.span + 1;
+  if (AL.factory && typeof factoryTimeline === 'function') factoryTimeline(items, g, W, H);
   for (const L of AL.model.lines) {
     const line = song.lines[L.li];
     if (L.s != null && L.e != null && L.e >= t0 && L.s <= t1 && L.words.length) {
@@ -840,6 +845,7 @@ function renderTimeline() {
     const el = tlItem('chord', L, c, tlX(c.t), Math.max(18, tlX(next) - tlX(c.t) - 2), chordName(c.ch, song.key));
     el.classList.add(degClass(c.ch.root, song.key));
     if (AL.sel && AL.sel.li === c.li && AL.sel.pos === c.pos) el.classList.add('sel');
+    if (AL.factory && typeof facIsNext === 'function' && facIsNext(c)) el.classList.add('fac-next');
     items.append(el);
   }
   // klik do prázdna / na pravítko = skok (na pravítku jde i táhnout), kolečko = posun
