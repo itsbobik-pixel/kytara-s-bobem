@@ -406,14 +406,31 @@ def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print
     dur = len(inst) / SR
     env = onset_env(inst)
     period = estimate_period(env)
-    beats = track_beats(env, period)
+    # tempo se často splete o polovinu/dvojnásobek → zkusíme i to a necháme variantu, kde akordy nejlíp sedí
+    periods = [period] + ([period / 2] if period > 0.75 else []) + ([period * 2] if period < 0.36 else [])
+    C = chroma(inst) if any(l.get('chords') for l in lines) else None
+    best = None
+    for per in periods:
+        bts = track_beats(env, per)
+        its = chord_items(lines, words, step=2 * float(np.median(np.diff(bts))))   # bez textu: ~2 doby na akord
+        if not its or C is None:
+            best = best or (bts, its, None, 0, None, -1e9)
+            continue
+        if best is None or best[3] is None:
+            shift, fit_words = detect_shift(its, C, dur)
+        snap_chords(its, bts, C, dur, shift=shift)
+        f, _ = chord_fit(its, C, dur, shift)
+        dev = [abs(it['time'] - it['t']) for it in its if not it.get('free')]
+        mdev = float(np.mean(dev)) if dev else 0.0
+        score = (f or 0) - 10 * mdev          # shoda akordů, ale ať neutíkají od svých slov
+        log('tempo %.1f BPM: akordy sedí %s %%, průměrně %.2f s od slova' % (60 / float(np.median(np.diff(bts))), f, mdev))
+        if best is None or best[2] is None or score > best[5]:
+            best = (bts, its, f, shift, fit_words, score)
+    beats, items = best[0], best[1]
     stats.update(beat=round(float(np.median(np.diff(beats))), 4), bpm=round(60 / float(np.median(np.diff(beats))), 1), beats=len(beats))
     log('doby: %d, tempo %.1f BPM' % (len(beats), stats['bpm']))
-    items = chord_items(lines, words, step=2 * float(np.median(np.diff(beats))))   # bez textu: ~2 doby na akord
-    if items:
-        C = chroma(inst)
-        shift, fit_words = detect_shift(items, C, dur)
-        snap_chords(items, beats, C, dur, shift=shift)
+    if items and C is not None:
+        shift, fit_words = best[3], best[4]
         fit, n = chord_fit(items, C, dur, shift)
         if fit is not None and fit < fit_words - 8:
             # přicvaknutí na doby akordy zhoršilo (špatně odhadnuté tempo) → zpívané akordy zpět k jejich slovům
