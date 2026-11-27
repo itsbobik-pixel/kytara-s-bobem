@@ -584,10 +584,11 @@ function alTick(force) {
   // přebarvení po písmenkách v aktuálním řádku
   const r = cur >= 0 && AL.refs.lines[cur];
   if (r) {
+    const byWord = AL.sync?.highlight === 'word';   // zvýrazňovat celá slova najednou (jinak po písmenkách)
     for (const c of r.chars) {
       const w = c.w;
       const k = c.i - w.pos;
-      c.el.classList.toggle('on', t >= w.s + (w.e - w.s) * (k / Math.max(1, w.len)));
+      c.el.classList.toggle('on', byWord ? t >= w.s : t >= w.s + (w.e - w.s) * (k / Math.max(1, w.len)));
     }
   }
   // akordy
