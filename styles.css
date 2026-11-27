@@ -858,3 +858,23 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .tl-grip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 3; }
 .tl-grip-l { left: 0; } .tl-grip-r { right: 0; }
 .tl-word:hover .tl-grip { background: color-mix(in srgb, var(--d3) 45%, transparent); }
+/* továrna */
+.factory { max-width: 860px; }
+.fac-list { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 8px; }
+.fac-list li { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.fac-name { flex: 1; font-weight: 600; }
+.fac-stage { font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.fac-beats { background: var(--d1); color: var(--d1-ink); } .fac-chords { background: var(--d3); color: var(--d3-ink); } .fac-done { background: var(--d2); color: var(--d2-ink); }
+.fac-panel { margin: 10px 0 14px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 2px solid var(--d1); }
+.fac-steps { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.fac-step { border: 0; border-radius: 999px; padding: 5px 14px; font: inherit; font-weight: 700; background: var(--surface-2); color: var(--muted); cursor: pointer; }
+.fac-step.on { background: var(--d1); color: var(--d1-ink); }
+.fac-body p { margin: 4px 0 10px; }
+.fac-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.fac-tap { font-size: 20px; font-weight: 800; padding: 12px 30px; background: var(--d0); color: #fff; border: 0; touch-action: manipulation; }
+.fac-tap:active { transform: scale(.96); }
+.fac-metro { display: inline-flex; gap: 6px; }
+.fac-metro i { width: 14px; height: 14px; border-radius: 50%; background: var(--surface-2); border: 2px solid var(--line); }
+.fac-metro i:first-child { border-color: var(--d0); }
+.fac-metro i.on { background: var(--d1); border-color: var(--d1); }
+.fac-metro i:first-child.on { background: var(--d0); border-color: var(--d0); }

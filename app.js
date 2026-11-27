@@ -478,8 +478,8 @@ const current = () => songs.find(s => s.id === route.id);
 function touch(song) { song.updated = Date.now(); saveSongs(); }
 let redoStack = [];
 let historyFor = null;   // historie platí jen pro právě otevřený song
-const snapshot = song => ({ id: song.id, lines: clone(song.lines), key: clone(song.key), custom: clone(song.custom || []), capo: song.capo || 0 });
-function restore(song, s) { song.lines = s.lines; song.key = s.key; song.custom = s.custom; song.capo = s.capo || 0; }
+const snapshot = song => ({ id: song.id, lines: clone(song.lines), key: clone(song.key), custom: clone(song.custom || []), capo: song.capo || 0, sync: song.sync ? clone(song.sync) : null });
+function restore(song, s) { song.lines = s.lines; song.key = s.key; song.custom = s.custom; song.capo = s.capo || 0; if ('sync' in s) song.sync = s.sync; }
 function pushUndo(song) {
   undoStack.push(snapshot(song));
   if (undoStack.length > 100) undoStack.shift();
@@ -517,6 +517,9 @@ function parseHash() {
   if (m && m[1] === 'along') return { view: 'along', id: m[2], mode: 'play' };
   if (m) return { view: 'song', id: m[2], mode: m[1] === 'play' ? 'play' : 'edit' };
   if (location.hash === '#ucet') return { view: 'account' };
+  if (location.hash === '#tovarna') return { view: 'factory' };
+  const fm = /^#tovarna-([A-Za-z0-9]+)$/.exec(location.hash);
+  if (fm) return { view: 'along', id: fm[1], mode: 'play', factory: true };
   return { view: 'list' };
 }
 function go(hash) { location.hash = hash; }
@@ -548,7 +551,9 @@ function render() {
     return;
   }
   document.documentElement.style.setProperty('--fs', settings.fontSize + 'px');
+  if (typeof AL !== 'undefined') AL.factory = !!route.factory && auth.admin;
   if (route.view === 'along') renderAlong();
+  else if (route.view === 'factory') renderFactoryList();
   else if (route.view === 'song') renderEditor();
   else if (route.view === 'account') renderAccount();
   else renderLibrary();
@@ -679,7 +684,7 @@ function renderLibrary() {
   app.innerHTML = '';
   document.body.classList.remove('playing');
   const shared = auth.mode === 'supabase';
-  renderTopActions();
+  renderTopActions(auth.admin ? [h('a', { class: 'btn ghost', href: '#tovarna', title: 'Písničky ke zpracování (tempo, akordy, vzhled)' }, '🏭 Továrna')] : []);
 
   const addSong = async () => {
     // přidat může i nepřihlášený: dostane anonymní účet, song čeká na schválení adminem
@@ -1609,6 +1614,26 @@ function renderSheet() {
 }
 
 // ---------- mutace ----------
+// ---------- čas akordu v play-alongu (song.sync) drží s akordem i při posunu v editoru ----------
+function chordTimeOf(song, li, pos) {
+  if (!song.sync?.lines || typeof buildModel !== 'function') return null;
+  try {
+    const m = buildModel(song, song.sync);
+    const c = m.chords.find(x => x.li === li && x.pos === pos);
+    return c?.t ?? null;
+  } catch { return null; }
+}
+function syncChordDel(song, li, pos) {
+  const sl = song.sync?.lines?.[li];
+  if (sl?.c) sl.c = sl.c.filter(x => x[0] !== pos);
+}
+function syncChordSet(song, li, pos, t) {
+  if (!song.sync?.lines) return;
+  const sl = song.sync.lines[li] || (song.sync.lines[li] = { w: [], c: [] });
+  sl.c = (sl.c || []).filter(x => x[0] !== pos);
+  sl.c.push([pos, Math.round(t * 1000) / 1000]);
+}
+
 function placeChord(li, pos, chord) {
   const song = current();
   pushUndo(song);
@@ -1916,12 +1941,17 @@ function onDragEnd() {
     if (t && t.li === p.li && t.pos === p.pos) { renderSheet(); return; }
     pushUndo(song);
     const src = song.lines[p.li];
+    // čas akordu v play-alongu zůstane, jen se přesune s ním (posun v editoru je čistě vizuální)
+    const keepT = chordTimeOf(song, p.li, p.pos);
     src.chords = src.chords.filter(c => c.pos !== p.pos);
+    syncChordDel(song, p.li, p.pos);
     if (t) {
       const dst = song.lines[t.li];
       dst.chords = dst.chords.filter(c => c.pos !== t.pos);
       dst.chords.push({ pos: t.pos, ...p.chord });
       dst.chords.sort((a, b) => a.pos - b.pos);
+      syncChordDel(song, t.li, t.pos);
+      if (keepT != null) syncChordSet(song, t.li, t.pos, keepT);
     } else toast('Akord smazán', 'Zpět', undo);
     touch(song); renderSheet();
   } else if (p.kind === 'section') {
@@ -2124,6 +2154,7 @@ document.addEventListener('keydown', e => {
     if (e.key === ' ') { e.preventDefault(); alToggle(); }
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); alRedo(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); alUndo(); }
+    else if (AL.factory && k === 'k') { e.preventDefault(); facTap(); }
     else if (AL.edit && AL.tap && k === 'j') { e.preventDefault(); tlTap(e.shiftKey); }
     else if (AL.edit && AL.barTaps && k === 'k') { e.preventDefault(); tlBarTap(); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {

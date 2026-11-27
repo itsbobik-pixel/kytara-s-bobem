@@ -493,6 +493,7 @@ function renderAlongBody() {
       AL.edit ? h('button', { id: 'alUndo', class: 'tbtn', onclick: alUndo, disabled: !AL.undo.length, title: 'Vrátit poslední posun (Ctrl+Z)' }, '↶ Zpět') : null));
 
   const ed = h('div', { class: 'editor play along' + (AL.edit ? ' al-editing' : '') }, bar);
+  if (AL.factory && editable && AL.sync && typeof factoryPanel === 'function') ed.append(factoryPanel(current()));
 
   if (AL.loading) {
     ed.append(h('div', { class: 'empty' }, h('div', { class: 'big-emoji' }, '🎧'), h('h2', {}, 'Načítám zvuk…')));
@@ -685,6 +686,7 @@ function alTick(force) {
     const a = ci >= 0 ? ch[ci].t : 0, b = ch[ci + 1]?.t;
     meter.style.width = b ? Math.min(100, Math.max(0, (tc - a) / Math.max(0.1, b - a) * 100)) + '%' : '0%';
   }
+  if (typeof factoryTick === 'function') factoryTick();
   if (AL.edit) {
     tlPlayhead(tReal);
     const pb = document.getElementById('tlPlay');
