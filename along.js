@@ -1045,8 +1045,9 @@ function tlPlayhead(t) {
   const head = $('#tlHead');
   if (!head) return;
   // při přehrávání drž playhead v záběru
-  if (AL.playing && (t > AL.view0 + AL.span * 0.85 || t < AL.view0)) {
-    AL.view0 = Math.max(0, t - AL.span * 0.2);
+  // při přehrávání: na 75 % šířky skoč na další úsek (čára pak bude na čtvrtině, ať je vidět, co přijde)
+  if (AL.playing && (t > AL.view0 + AL.span * 0.75 || t < AL.view0)) {
+    AL.view0 = Math.max(0, t - AL.span * 0.25);
     renderTimeline();
     return;
   }
