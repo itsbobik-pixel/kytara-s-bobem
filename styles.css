@@ -854,3 +854,7 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .tl-over { position: relative; height: 14px; margin: 2px 0 6px; border-radius: 7px; background: var(--surface-2); cursor: pointer; touch-action: none; overflow: hidden; }
 .tl-over-win { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--d3) 35%, transparent); border: 1.5px solid var(--d3); border-radius: 7px; box-sizing: border-box; pointer-events: none; }
 .tl-over-head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--d0); pointer-events: none; }
+/* editor časů: úchyty pro natažení slova */
+.tl-grip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 3; }
+.tl-grip-l { left: 0; } .tl-grip-r { right: 0; }
+.tl-word:hover .tl-grip { background: color-mix(in srgb, var(--d3) 45%, transparent); }

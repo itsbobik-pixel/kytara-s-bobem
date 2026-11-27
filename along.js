@@ -87,7 +87,7 @@ function buildModel(song, sync) {
   const lines = song.lines.map((line, li) => {
     const sl = sync.lines[li] || { w: [], c: [] };
     // k = index v sl.w (podle něj editor posouvá)
-    const words = sl.w.map(([pos, len, s, e], k) => ({ k, pos, len, s, e: Math.max(e, s + 0.05) }))
+    const words = sl.w.map(([pos, len, s, e, m], k) => ({ k, pos, len, s, e: Math.max(e, s + 0.05), m: !!m }))   // m = délka nastavená ručně
       .filter(w => w.pos < Math.max(1, line.text.length));
     const tAt = pos => {
       if (!words.length) return null;
@@ -648,7 +648,7 @@ function alTick(force) {
       const k = c.i - w.pos;
       // přebarvení slova netrvá déle, než se slovo reálně zpívá (poslední slova řádku mají v datech
       // konec protažený až přes držený tón / ticho → písmenka by „dojížděla“ ještě sekundy po zazpívání)
-      const wd = Math.min(w.e - w.s, 0.1 * w.len + 0.2);
+      const wd = w.m ? w.e - w.s : Math.min(w.e - w.s, 0.1 * w.len + 0.2);
       let on;
       if (mode === 'word') on = t >= w.s;
       else if (mode === 'syllable') {
@@ -836,7 +836,7 @@ function renderTimeline() {
     const at = ev => alSeek(Math.max(0, AL.view0 + (ev.clientX - r.left) / W * AL.span));
     at(e);
     if (e.clientY - r.top <= TL.ruler + 4) {
-      area.setPointerCapture(e.pointerId);
+      try { area.setPointerCapture(e.pointerId); } catch { /* nic */ }
       const mv = ev => at(ev);
       const up = () => { area.removeEventListener('pointermove', mv); area.removeEventListener('pointerup', up); };
       area.addEventListener('pointermove', mv);
@@ -859,7 +859,7 @@ function renderTimeline() {
         renderTimeline();
       };
       go(e);
-      over.setPointerCapture(e.pointerId);
+      try { over.setPointerCapture(e.pointerId); } catch { /* nic */ }
       const mv = ev => go(ev);
       const up = () => { over.removeEventListener('pointermove', mv); over.removeEventListener('pointerup', up); };
       over.addEventListener('pointermove', mv);
@@ -880,7 +880,52 @@ function tlItem(kind, L, obj, x, w, label) {
   const el = h('div', { class: 'tl-it tl-' + kind, style: `left:${x}px;top:${top}px;height:${hgt}px;width:${w}px`, title: label }, label);
   el._L = L;
   el.addEventListener('pointerdown', e => tlDrag(e, el, kind, L, obj));
+  if (kind === 'word') {   // úchyty: levý = začátek, pravý = konec slova (natažení / zkrácení)
+    for (const side of ['l', 'r']) {
+      const g = h('div', { class: 'tl-grip tl-grip-' + side, title: side === 'r' ? 'Táhni = konec slova' : 'Táhni = začátek slova' });
+      g.addEventListener('pointerdown', e => tlResize(e, el, L, obj, side));
+      el.append(g);
+    }
+  }
   return el;
+}
+
+/** natažení / zkrácení slova za okraj (levý = začátek, pravý = konec) */
+function tlResize(e, el, L, w, side) {
+  e.preventDefault();
+  e.stopPropagation();
+  const x0 = e.clientX, pps = tlWidth() / AL.span;
+  const left0 = parseFloat(el.style.left), width0 = parseFloat(el.style.width);
+  const s0 = w.s, e0 = wordEnd(w);
+  let d = 0;
+  try { el.setPointerCapture(e.pointerId); } catch { /* nic */ }
+  el.classList.add('dragging');
+  const move = ev => {
+    d = (ev.clientX - x0) / pps;
+    if (side === 'r') d = Math.max(0.05 - (e0 - s0), d);
+    else d = Math.min((e0 - s0) - 0.05, d);
+    if (side === 'r') el.style.width = (width0 + d * pps) + 'px';
+    else { el.style.left = (left0 + d * pps) + 'px'; el.style.width = (width0 - d * pps) + 'px'; }
+    el.dataset.d = (side === 'r' ? 'konec ' : 'začátek ') + (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(2) + ' s';
+  };
+  const up = () => {
+    el.removeEventListener('pointermove', move);
+    el.removeEventListener('pointerup', up);
+    el.removeEventListener('pointercancel', up);
+    el.classList.remove('dragging');
+    if (Math.abs(d) < 0.01) return;
+    const sw = AL.sync.lines[L.li]?.w[w.k];
+    if (!sw) return;
+    pushSyncUndo();
+    if (side === 'r') { sw[3] = r3(e0 + d); sw[2] = r3(s0); }
+    else { sw[2] = r3(Math.max(0, s0 + d)); sw[3] = r3(e0); }
+    sw[4] = 1;   // ručně nastavená délka (přebarvení přesně podle ní)
+    commitSync();
+    renderAlongBody();
+  };
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
 }
 
 /** tažení položky na časové ose */
@@ -895,7 +940,7 @@ function tlDrag(e, el, kind, L, obj) {
     ? [...$('#tlItems').children].filter(it => it._L === L)
     : [el];
   group.forEach(it => { it._left0 = parseFloat(it.style.left); });
-  el.setPointerCapture(e.pointerId);
+  try { el.setPointerCapture(e.pointerId); } catch { /* nic */ }
   el.classList.add('dragging');
   const t0 = kind === 'chord' ? obj.t : kind === 'word' ? obj.s : L.s;
   const snapD = (dx, free) => {   // posun v s, přicvaknutý na nejbližší dobu
@@ -1001,7 +1046,7 @@ function tlTap(free) {
 }
 
 /** reálný konec zpívání slova (konce posledních slov řádku bývají v datech protažené přes držený tón / pauzu) */
-const wordEnd = w => w.s + Math.min(w.e - w.s, 0.1 * w.len + 0.2);
+const wordEnd = w => w.m ? w.e : w.s + Math.min(w.e - w.s, 0.1 * w.len + 0.2);
 
 /** akord posunutý v čase přesune i v textu: nad slovo (místo ve slově), které se v tu chvíli zpívá,
  *  případně na sousední řádek. Mezihry (řádky bez textu) se nemění. */
