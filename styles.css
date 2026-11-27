@@ -898,3 +898,15 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .al-loader i { width: 11px; height: 100%; border-radius: 6px; transform-origin: bottom; animation: alEq 1.1s ease-in-out infinite; animation-delay: calc(var(--i) * -0.17s); }
 @keyframes alEq { 0%, 100% { transform: scaleY(.22); } 35% { transform: scaleY(1); } 65% { transform: scaleY(.5); } }
 @media (prefers-reduced-motion: reduce) { .al-loader i { animation-duration: 3s; } }
+/* továrna v liště editoru časů + vlastní ikony magnet / praporek */
+.al-tl .fac-tools { flex: 1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.al-tl .fac-tools .fac-tap { font-size: 14px; padding: 6px 16px; border-radius: 999px; }
+.fac-next-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.fac-next-chip .chord { position: static; display: inline-block; transform: none; font-size: 16px; }
+.ico .mg-tip { fill: var(--d0); stroke: var(--d0); }
+.ico .fl-cloth { fill: var(--d0); stroke: var(--d0); }
+.tgroup button .ico, .fac-start .ico { vertical-align: -0.2em; }
+.fac-start span .ico .fl-cloth { fill: #fff; stroke: #fff; }
+.fac-start span .ico { color: #fff; }
+.al-tl .fac-tools .tgroup button { padding-left: 10px; padding-right: 10px; }
+.al-tl .tl-tools:has(.fac-tools) { flex-wrap: wrap; }

@@ -525,7 +525,6 @@ function renderAlongBody() {
   ed.append(h('div', { class: 'sheet-wrap' }, sheet));
   if (AL.edit) {
     const tl = renderTimelineShell();
-    if (AL.factory && typeof factoryPanel === 'function') tl.prepend(factoryPanel(current()));
     ed.append(tl);
   }
   app.append(ed);
@@ -714,12 +713,16 @@ function renderTimelineShell() {
         h('button', { title: 'Přehrát / pauza (mezerník)', id: 'tlPlay', onclick: () => alToggle() }, AL.playing ? '⏸' : '▶'),
         h('button', { title: 'Stop – zastavit a vrátit na začátek', onclick: () => { alPause(); alSeek(0); } }, '⏹'),
         h('button', { title: 'O 5 s dál', onclick: () => alSeek(alNow() + 5) }, '+5 s')),
-      AL.factory ? h('span', { class: 'tl-hint' }) : h('span', { class: 'tl-hint' }, 'Táhni akord, slovo nebo řádek (Shift = opačně než 🧲). Vybraný akord: ←/→ posun. Klik do prázdna = skok.'),
-      h('button', {
-        class: 'tbtn' + (tlSnapOn() ? ' on' : ''),
-        title: 'Přicvakávat akordy na doby (tažení, šipky, ťukání). Vypnuto = volně, šipky po 0,05 s.',
-        onclick: () => { try { localStorage.setItem('ksb.along.snap', tlSnapOn() ? '0' : '1'); } catch { /* nic */ } renderAlongBody(); },
-      }, tlSnapOn() ? '🧲 Na doby: zap' : '🧲 Na doby: vyp'),
+      AL.factory && typeof factoryPanel === 'function'
+        ? factoryPanel(current())
+        : h('span', { class: 'tl-hint' }, 'Táhni akord, slovo nebo řádek (Shift = opačně než magnet). Vybraný akord: ←/→ posun. Klik do prázdna = skok.'),
+      AL.factory && (FAC.forceStage || AL.sync?.stage) === 'beats' ? null : h('div', { class: 'tgroup tl-snap' },
+        h('button', {
+          class: tlSnapOn() ? 'on' : '',
+          title: tlSnapOn() ? 'Přicvakávání na doby ZAPNUTÉ (tažení, šipky, ťukání). Klik = vypnout.' : 'Přicvakávání na doby VYPNUTÉ – volně, šipky po 0,05 s. Klik = zapnout.',
+          onclick: () => { try { localStorage.setItem('ksb.along.snap', tlSnapOn() ? '0' : '1'); } catch { /* nic */ } renderAlongBody(); },
+        }, ico('magnet'), ' Na doby'),
+        h('button', { title: 'Všechny akordy přicvaknout na nejbližší dobu (jde vrátit ↶ Zpět)', disabled: !AL.sync?.beats?.length, onclick: () => snapAllChords() }, 'Všechny')),
       AL.factory ? null : h('button', {
         class: 'tbtn' + (AL.tap ? ' on' : ''), id: 'tlTap',
         title: 'Ťukání: pusť písničku a při každé změně akordu zmáčkni J – nejbližší akord skočí na ten okamžik (na dobu)',
@@ -1008,6 +1011,24 @@ function nearestBeat(t) {
   while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (b[mid] < t) lo = mid; else hi = mid; }
   return Math.abs(b[lo] - t) <= Math.abs(b[hi] - t) ? b[lo] : b[hi];
 }
+/** všechny akordy na nejbližší dobu (dva akordy na jednu dobu → druhý zůstane, kde byl) */
+function snapAllChords() {
+  if (!AL.sync?.beats?.length) return;
+  pushSyncUndo();
+  let moved = 0, last = -1;
+  const all = AL.model.lines.flatMap(L => L.chords.filter(c => c.t != null).map(c => ({ L, c })))
+    .sort((x, y) => x.c.t - y.c.t);
+  for (const { L, c } of all) {
+    const to = nearestBeat(c.t);
+    if (Math.abs(to - last) < 0.01) { last = c.t; continue; }
+    if (Math.abs(to - c.t) > 0.001) { shiftSync('chord', L, c, to - c.t); moved++; }
+    last = to;
+  }
+  commitSync();
+  renderAlongBody();
+  toast(`${moved} akordů přicvaknuto na doby.`);
+}
+
 /** ťuknutí na 1. dobu taktu (klávesa K) */
 function tlBarTap() {
   if (!AL.barTaps) return;

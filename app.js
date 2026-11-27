@@ -24,6 +24,8 @@ function h(tag, attrs = {}, ...kids) {
 
 // ---------- vlastní ikony (čárové SVG, barva podle textu) ----------
 const ICONS = {
+  flag: '<path d="M6 22V3"/><path class="fl-cloth" d="M6 4h12l-3 4.5 3 4.5H6"/>',
+  magnet: '<path d="M5 3h4v8a3 3 0 0 0 6 0V3h4v8a7 7 0 0 1-14 0z"/><path class="mg-tip" d="M5 3h4v4H5zM15 3h4v4h-4z"/>',
   headphones: '<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="5" height="7" rx="2"/><rect x="16" y="14" width="5" height="7" rx="2"/>',
   copy: '<rect x="8" y="8" width="12" height="13" rx="3"/><path d="M16 8V6a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h1"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.8 2.6 4 5.6 4 9s-1.2 6.4-4 9c-2.8-2.6-4-5.6-4-9s1.2-6.4 4-9z"/>',
