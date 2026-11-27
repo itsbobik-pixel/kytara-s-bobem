@@ -34,3 +34,6 @@ jobs:
             ghcr.io/itsbobik-pixel/playalong-worker:latest
             ghcr.io/itsbobik-pixel/playalong-worker:${{ github.sha }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          # cache vrstev v registru: při změně kódu se přestaví jen poslední malá vrstva (minuty místo ~20 min)
+          cache-from: type=registry,ref=ghcr.io/itsbobik-pixel/playalong-worker:buildcache
+          cache-to: type=registry,ref=ghcr.io/itsbobik-pixel/playalong-worker:buildcache,mode=max
