@@ -474,4 +474,10 @@ def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print
     for it in items:
         csync[it['li']].append([it['pos'], it['time']])
     sync = {'v': 1, 'dur': round(dur, 2), 'lines': [{'w': w, 'c': c} for w, c in zip(words, csync)]}
+    # doby a takty pro editor časů (mřížka, přicvaknutí při tažení)
+    sync['beats'] = [round(float(x), 3) for x in beats]
+    if C is not None and len(beats) > 8:
+        m, ph, con = find_bars(beats, C)
+        if con >= 0.4:
+            sync['meter'], sync['bar0'] = int(m), int(ph)
     return sync, stats, beats

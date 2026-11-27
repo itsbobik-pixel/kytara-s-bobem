@@ -746,8 +746,9 @@ a.tbtn { text-decoration: none; color: inherit; display: inline-flex; align-item
 .tl-it.dragging::after { content: attr(data-d); position: absolute; top: -18px; left: 0; font-size: 11px; font-weight: 700; background: var(--ink); color: var(--bg); padding: 2px 5px; border-radius: 5px; }
 .tl-line { background: color-mix(in srgb, var(--d3) 22%, var(--surface)); border: 1.5px solid var(--d3); font-weight: 600; }
 .tl-word { background: var(--surface); border: 1.5px solid color-mix(in srgb, var(--ink) 25%, transparent); }
-.tl-chord { background: var(--chip-bg); color: var(--chip-ink); font-weight: 800; border-radius: 999px; transform: translateX(-4px); padding: 0 8px; overflow: visible; }
-.tl-chord::before { content: ''; position: absolute; left: 3px; top: 100%; width: 2px; height: 80px; background: var(--chip-bg); opacity: .5; }
+.tl-chord { background: var(--chip-bg); color: var(--chip-ink); font-weight: 800; border-radius: 6px; padding: 0 6px; overflow: hidden; border-left: 3px solid color-mix(in srgb, var(--ink) 55%, transparent); }
+.tl-chord::before { content: ''; position: absolute; left: -3px; top: 100%; width: 2px; height: 80px; background: var(--chip-bg); opacity: .5; }
+.tl-chord.sel { outline: 2.5px solid var(--ink); outline-offset: 1px; z-index: 5; }
 .tl-head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--d0); z-index: 5; pointer-events: none; }
 .tl-head::before { content: ''; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top-color: var(--d0); }
 @media (max-width: 640px) {

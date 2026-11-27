@@ -658,7 +658,11 @@ function alTick(force) {
     const a = ci >= 0 ? ch[ci].t : 0, b = ch[ci + 1]?.t;
     meter.style.width = b ? Math.min(100, Math.max(0, (tc - a) / Math.max(0.1, b - a) * 100)) + '%' : '0%';
   }
-  if (AL.edit) tlPlayhead(tReal);
+  if (AL.edit) {
+    tlPlayhead(tReal);
+    const pb = document.getElementById('tlPlay');
+    if (pb) { const want = AL.playing ? '⏸' : '▶'; if (pb.textContent !== want) pb.textContent = want; }
+  }
 }
 
 // ---------- časová osa (Doladit) ----------
@@ -667,7 +671,18 @@ const TL = { lanes: { line: [4, 26], word: [34, 30], chord: [70, 26] }, wave: [1
 function renderTimelineShell() {
   return h('div', { class: 'al-tl', id: 'alTl' },
     h('div', { class: 'tl-tools' },
-      h('span', { class: 'tl-hint' }, 'Táhni slovo, akord nebo celý řádek. Klik do prázdna = skok.'),
+      h('div', { class: 'tgroup tl-transport' },
+        h('button', { title: 'Na začátek', onclick: () => alSeek(0) }, '⏮'),
+        h('button', { title: 'O 5 s zpět', onclick: () => alSeek(Math.max(0, alNow() - 5)) }, '−5 s'),
+        h('button', { title: 'Přehrát / pauza (mezerník)', id: 'tlPlay', onclick: () => alToggle() }, AL.playing ? '⏸' : '▶'),
+        h('button', { title: 'Stop – zastavit a vrátit na začátek', onclick: () => { alPause(); alSeek(0); } }, '⏹'),
+        h('button', { title: 'O 5 s dál', onclick: () => alSeek(alNow() + 5) }, '+5 s')),
+      h('span', { class: 'tl-hint' }, 'Táhni akord, slovo nebo řádek – akord se přicvakne na dobu (Shift = volně). Vybraný akord: ←/→ o dobu. Klik do prázdna = skok.'),
+      h('button', {
+        class: 'tbtn' + (AL.tap ? ' on' : ''), id: 'tlTap',
+        title: 'Ťukání: pusť písničku a při každé změně akordu zmáčkni J – nejbližší akord skočí na ten okamžik (na dobu)',
+        onclick: () => { AL.tap = !AL.tap; AL.tapped = new Set(); renderAlongBody(); },
+      }, AL.tap ? '⌨ Ťukání: J' : '⌨ Ťukat akordy'),
       h('button', { class: 'tbtn', title: 'Oddálit', onclick: () => tlZoom(1.5) }, '−'),
       h('button', { class: 'tbtn', title: 'Přiblížit', onclick: () => tlZoom(1 / 1.5) }, '+')),
     h('div', { class: 'tl-area', id: 'tlArea' },
@@ -711,6 +726,26 @@ function renderTimeline() {
       g.fillStyle = css.getPropertyValue('--line') || '#ddd';
     }
   }
+  // mřížka dob a taktů (z workeru), 1. doba taktu silněji s číslem taktu
+  const beats = AL.sync?.beats;
+  if (beats?.length) {
+    const m = AL.sync.meter, b0 = AL.sync.bar0 ?? 0;
+    const ink = css.getPropertyValue('--ink') || '#222';
+    for (let i = 0; i < beats.length; i++) {
+      const bt = beats[i];
+      if (bt < AL.view0 - 1 || bt > AL.view0 + AL.span + 1) continue;
+      const x = tlX(bt);
+      const bar = m && (i - b0) % m === 0;
+      g.fillStyle = ink;
+      g.globalAlpha = bar ? 0.28 : 0.09;
+      g.fillRect(x, 0, bar ? 1.5 : 1, H - 14);
+      if (bar && AL.span < 30) {
+        g.globalAlpha = 0.45;
+        g.fillText(String(Math.floor((i - b0) / m) + 1), x + 3, 12);
+      }
+    }
+    g.globalAlpha = 1;
+  }
   // vlna vokálu
   if (AL.env) {
     const [top, hgt] = TL.wave;
@@ -736,12 +771,18 @@ function renderTimeline() {
       if (w.e < t0 || w.s > t1) continue;
       items.append(tlItem('word', L, w, tlX(w.s), Math.max(6, tlX(w.e) - tlX(w.s)), line.text.substr(w.pos, w.len)));
     }
-    for (const c of L.chords) {
-      if (c.t == null || c.t < t0 || c.t > t1) continue;
-      const el = tlItem('chord', L, c, tlX(c.t), 0, chordName(c.ch, song.key));
-      el.classList.add(degClass(c.ch.root, song.key));
-      items.append(el);
-    }
+  }
+  const allCh = AL.model.chords;
+  for (let i = 0; i < allCh.length; i++) {
+    const c = allCh[i];
+    if (c.t == null) continue;
+    const next = allCh[i + 1]?.t ?? c.t + 2;
+    if (next < t0 || c.t > t1) continue;
+    const L = AL.model.lines.find(x => x.li === c.li);
+    const el = tlItem('chord', L, c, tlX(c.t), Math.max(18, tlX(next) - tlX(c.t) - 2), chordName(c.ch, song.key));
+    el.classList.add(degClass(c.ch.root, song.key));
+    if (AL.sel && AL.sel.li === c.li && AL.sel.pos === c.pos) el.classList.add('sel');
+    items.append(el);
   }
   // klik do prázdna = skok, kolečko = posun
   area.onpointerdown = e => {
@@ -760,7 +801,7 @@ function renderTimeline() {
 
 function tlItem(kind, L, obj, x, w, label) {
   const [top, hgt] = TL.lanes[kind];
-  const el = h('div', { class: 'tl-it tl-' + kind, style: `left:${x}px;top:${top}px;height:${hgt}px;` + (kind === 'chord' ? '' : `width:${w}px`), title: label }, label);
+  const el = h('div', { class: 'tl-it tl-' + kind, style: `left:${x}px;top:${top}px;height:${hgt}px;width:${w}px`, title: label }, label);
   el._L = L;
   el.addEventListener('pointerdown', e => tlDrag(e, el, kind, L, obj));
   return el;
@@ -780,25 +821,32 @@ function tlDrag(e, el, kind, L, obj) {
   group.forEach(it => { it._left0 = parseFloat(it.style.left); });
   el.setPointerCapture(e.pointerId);
   el.classList.add('dragging');
+  const t0 = kind === 'chord' ? obj.t : kind === 'word' ? obj.s : L.s;
+  const snapD = (dx, free) => {   // posun v s, přicvaknutý na nejbližší dobu
+    const d = dx / pps;
+    if (free || !AL.sync?.beats?.length || t0 == null) return d;
+    return nearestBeat(t0 + d) - t0;
+  };
   const move = ev => {
     const dx = ev.clientX - x0;
     if (!moved && Math.abs(dx) < 3) return;
     moved = true;
-    group.forEach(it => { it.style.left = (it._left0 + dx) + 'px'; });
-    el.dataset.d = (dx / pps >= 0 ? '+' : '−') + Math.abs(dx / pps).toFixed(2) + ' s';
+    const d = snapD(dx, ev.shiftKey);
+    group.forEach(it => { it.style.left = (it._left0 + d * pps) + 'px'; });
+    el.dataset.d = (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(2) + ' s';
   };
   const up = ev => {
     el.removeEventListener('pointermove', move);
     el.removeEventListener('pointerup', up);
     el.removeEventListener('pointercancel', up);
     el.classList.remove('dragging');
-    if (!moved) {   // klik = přehraj od tohoto místa
-      const t = kind === 'chord' ? obj.t : kind === 'word' ? obj.s : L.s;
-      alSeek(t - 0.3);
+    if (!moved) {   // klik = vyber (akord) a přehraj od tohoto místa
+      if (kind === 'chord') { AL.sel = { li: obj.li ?? L.li, pos: obj.pos }; renderTimeline(); }
+      alSeek(t0 - 0.3);
       if (!AL.playing) alPlay();
       return;
     }
-    const d = (ev.clientX - x0) / pps;
+    const d = snapD(ev.clientX - x0, ev.shiftKey);
     pushSyncUndo();
     shiftSync(kind, L, obj, d);
     commitSync();
@@ -807,6 +855,50 @@ function tlDrag(e, el, kind, L, obj) {
   el.addEventListener('pointermove', move);
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
+}
+
+/** nejbližší doba (když chybí, vrátí čas beze změny) */
+function nearestBeat(t) {
+  const b = AL.sync?.beats;
+  if (!b?.length) return t;
+  let lo = 0, hi = b.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (b[mid] < t) lo = mid; else hi = mid; }
+  return Math.abs(b[lo] - t) <= Math.abs(b[hi] - t) ? b[lo] : b[hi];
+}
+/** vybraný akord o dobu vlevo/vpravo (fine = o 0,05 s) */
+function tlNudge(dir, fine) {
+  if (!AL.sel) return false;
+  const L = AL.model.lines.find(x => x.li === AL.sel.li);
+  const c = L?.chords.find(x => x.pos === AL.sel.pos);
+  if (!c || c.t == null) return false;
+  let to = c.t + dir * 0.05;
+  const b = AL.sync?.beats;
+  if (!fine && b?.length) {
+    const cur = nearestBeat(c.t);
+    const i = b.indexOf(cur);
+    to = b[Math.max(0, Math.min(b.length - 1, i + dir))];
+    if (Math.abs(cur - c.t) > 0.03 && ((dir > 0 && cur > c.t) || (dir < 0 && cur < c.t))) to = cur;   // nejdřív na dobu
+  }
+  pushSyncUndo();
+  shiftSync('chord', L, c, to - c.t);
+  commitSync();
+  renderAlongBody();
+  return true;
+}
+/** ťukání: nejbližší ještě neoťukaný akord (do 2,5 s) skočí na teď (na dobu; se Shiftem přesně) */
+function tlTap(free) {
+  const now = alNow();
+  const ch = AL.model.chords.filter(c => c.t != null && Math.abs(c.t - now) < 2.5 && !AL.tapped?.has(c.li + ':' + c.pos));
+  if (!ch.length) return;
+  const c = ch.reduce((a, b) => (Math.abs(b.t - now) < Math.abs(a.t - now) ? b : a));
+  const L = AL.model.lines.find(x => x.li === c.li);
+  const to = free ? now : nearestBeat(now);
+  pushSyncUndo();
+  shiftSync('chord', L, c, to - c.t);
+  commitSync();
+  (AL.tapped || (AL.tapped = new Set())).add(c.li + ':' + c.pos);
+  AL.sel = { li: c.li, pos: c.pos };
+  renderAlongBody();
 }
 
 /** posun v datech: slovo (i s akordy nad ním), akord, nebo celý řádek */

@@ -2123,7 +2123,13 @@ document.addEventListener('keydown', e => {
   if (route.view === 'along' && !typing) {
     if (e.key === ' ') { e.preventDefault(); alToggle(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); alUndo(); }
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); alSeek(alNow() + (e.key === 'ArrowLeft' ? -5 : 5)); }
+    else if (AL.edit && AL.tap && k === 'j') { e.preventDefault(); tlTap(e.shiftKey); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      const dir = e.key === 'ArrowLeft' ? -1 : 1;
+      if (!(AL.edit && tlNudge(dir, e.shiftKey))) alSeek(alNow() + dir * 5);
+    }
+    else if (e.key === 'Escape' && AL.edit && AL.sel) { AL.sel = null; renderTimeline(); }
     return;
   }
   if ((e.ctrlKey || e.metaKey) && !typing && route.view === 'song' && (k === 'z' || k === 'y')) {
