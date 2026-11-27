@@ -113,53 +113,88 @@ function facTap() {
   renderTimeline();
 }
 
-/** z ťuků dob: přímka t = a + P·k (robustně), pak mřížka pro celou píseň – mimo ťuky navazuje na nalezené doby */
-function applyBeatTaps() {
-  const taps = [...FAC.taps].sort((a, b) => a - b);
-  if (taps.length < 8) return;
+/** z ťuků dob udělá mřížku pro celou píseň.
+ *  Když ťuky sedí na jedno tempo (odchylka < 7 % doby, tempo na začátku a na konci stejné), je mřížka pevná až do konce.
+ *  Když tempo plave, jde mřížka podle ťuků (klouzavě), mimo ťuky pokračuje tempem z kraje ťuků. */
+function fitTapGrid(tapsIn, start, dur) {
+  const taps = [...tapsIn].sort((a, b) => a - b);
   const d = taps.slice(1).map((x, i) => x - taps[i]).sort((x, y) => x - y);
   const P0 = d[d.length >> 1];
-  const ks = taps.map(t => Math.round((t - taps[0]) / P0));   // vynechané doby se dopočítají
-  // nejmenší čtverce s vyřazením odlehlých ťuků
-  let use = taps.map((_, i) => i), a = taps[0], P = P0;
-  for (let it = 0; it < 3; it++) {
-    const n = use.length, sk = use.reduce((s, i) => s + ks[i], 0), st = use.reduce((s, i) => s + taps[i], 0);
-    const skk = use.reduce((s, i) => s + ks[i] * ks[i], 0), skt = use.reduce((s, i) => s + ks[i] * taps[i], 0);
-    P = (n * skt - sk * st) / Math.max(1e-9, n * skk - sk * sk);
-    a = (st - P * sk) / n;
-    const res = use.map(i => Math.abs(taps[i] - (a + P * ks[i])));
-    const lim = Math.max(0.03, [...res].sort((x, y) => x - y)[res.length >> 1] * 3);
-    use = use.filter((i, j) => res[j] <= lim);
-  }
-  const dur = AL.dur || AL.sync.dur || taps[taps.length - 1] + 30;
-  const kLast = ks[ks.length - 1];
-  const core = [];
-  for (let k = 0; k <= kLast; k++) core.push(a + P * k);
-  const old = (AL.sync.beats || []).filter(x => x < core[0] - P * 0.5 || x > core[core.length - 1] + P * 0.5);
-  const fill = (from, dir, limit) => {
-    const res = [];
-    let t = from + dir * P;
-    while (dir < 0 ? t > limit : t < limit) {
-      const near = old.reduce((b, x) => Math.abs(x - t) < Math.abs(b - t) ? x : b, Infinity);
-      const v = Math.abs(near - t) < P * 0.15 ? near : t;   // tempo se může hýbat → drž se nalezených dob, když sedí
-      res.push(v);
-      t = v + dir * P;
-    }
-    return res;
+  // číslo doby postupně (vynechané doby se dopočítají, zrychlení nevadí)
+  const ks = [0];
+  for (let i = 1; i < taps.length; i++) ks.push(ks[i - 1] + Math.max(1, Math.round((taps[i] - taps[i - 1]) / P0)));
+  const lsq = idx => {
+    const n = idx.length, sk = idx.reduce((s, i) => s + ks[i], 0), st = idx.reduce((s, i) => s + taps[i], 0);
+    const skk = idx.reduce((s, i) => s + ks[i] * ks[i], 0), skt = idx.reduce((s, i) => s + ks[i] * taps[i], 0);
+    const P = (n * skt - sk * st) / Math.max(1e-9, n * skk - sk * sk);
+    return { P, a: (st - P * sk) / n };
   };
-  const startLimit = FAC.start != null ? FAC.start - P * 0.5 : 0;
-  const before = fill(core[0], -1, Math.max(0, startLimit)).reverse();
-  const after = fill(core[core.length - 1], +1, dur);
+  // jedno tempo přes všechno, odlehlé ťuky pryč
+  let use = taps.map((_, i) => i), fit = lsq(use);
+  for (let it = 0; it < 3; it++) {
+    const res = use.map(i => Math.abs(taps[i] - (fit.a + fit.P * ks[i])));
+    const lim = Math.max(0.04, [...res].sort((x, y) => x - y)[res.length >> 1] * 3);
+    const nu = use.filter((i, j) => res[j] <= lim);
+    if (nu.length < 8) break;
+    use = nu; fit = lsq(use);
+  }
+  // jak moc se ťuky drží jednoho tempa (klouzavý medián odchylky)
+  const res = use.map(i => taps[i] - (fit.a + fit.P * ks[i]));
+  let drift = 0;
+  for (let j = 0; j < res.length; j++) {
+    const w = res.slice(Math.max(0, j - 4), j + 5).sort((x, y) => x - y);
+    drift = Math.max(drift, Math.abs(w[w.length >> 1]));
+  }
+  const steady = drift < fit.P * 0.07 && Math.abs(lsq(use.slice(0, 16)).P / lsq(use.slice(-16)).P - 1) < 0.015;
+  const k0 = ks[use[0]], kN = ks[use[use.length - 1]];
+  let at, Pa, Pb, ta, tb;
+  if (steady) {
+    at = k => fit.a + fit.P * k;
+    Pa = Pb = fit.P; ta = at(k0); tb = at(kN);
+  } else {
+    // každý ťuk vyhladit přímkou přes sousedy (±8), mezi ťuky lineárně
+    const sm = use.map((_, j) => {
+      const win = use.slice(Math.max(0, j - 8), j + 9), f = lsq(win);
+      return [ks[use[j]], f.a + f.P * ks[use[j]]];
+    });
+    const edge = win => lsq(win).P;
+    Pa = edge(use.slice(0, 16)); Pb = edge(use.slice(-16));
+    ta = sm[0][1]; tb = sm[sm.length - 1][1];
+    at = k => {
+      if (k <= sm[0][0]) return ta + (k - sm[0][0]) * Pa;
+      if (k >= sm[sm.length - 1][0]) return tb + (k - sm[sm.length - 1][0]) * Pb;
+      let lo = 0, hi = sm.length - 1;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (sm[m][0] <= k) lo = m; else hi = m; }
+      const [ka, xa] = sm[lo], [kb, xb] = sm[hi];
+      return xa + (xb - xa) * (k - ka) / (kb - ka);
+    };
+  }
+  const from = start != null ? start - Pa * 0.5 : 0;
+  const kMin = k0 - Math.floor((ta - Math.max(0, from)) / Pa);
+  const kMax = kN + Math.floor((dur - tb) / Pb);
+  const beats = [];
+  for (let k = kMin; k <= kMax; k++) { const t = at(k); if (t >= 0 && t <= dur) beats.push(t); }
+  return { beats, firstK: kMin, P: fit.P, steady, drift, tapEnd: taps[taps.length - 1] };
+}
+
+function applyBeatTaps() {
+  if (FAC.taps.length < 8) return;
+  const dur = AL.dur || AL.sync.dur || Math.max(...FAC.taps) + 30;
+  const g = fitTapGrid(FAC.taps, FAC.start, dur);
   pushSyncUndo();
-  AL.sync.beats = [...before, ...core, ...after].map(r3);
+  AL.sync.beats = g.beats.map(r3);
+  AL.sync.taps = [...FAC.taps].sort((a, b) => a - b).map(r3);   // syrové ťuky – ať jdou přepočítat
   AL.sync.meter = FAC.meter;
-  AL.sync.bar0 = before.length % FAC.meter;
+  AL.sync.bar0 = ((-g.firstK) % FAC.meter + FAC.meter) % FAC.meter;   // první ťuk = 1. doba taktu
   if (FAC.start != null) AL.sync.start = FAC.start;
   AL.sync.stage = 'chords';
   FAC.taps = []; FAC.forceStage = null; FAC.idx = -1;
   commitSync();
   renderAlongBody();
-  toast(`Tempo ${Math.round(60 / P)} BPM, mřížka pro celou píseň ✓ Teď akordy.`);
+  const bpm = Math.round(60 / g.P);
+  toast(g.steady
+    ? `Pevné tempo ${bpm} BPM – ťuky sedí, mřížka až do konce ✓ Teď akordy.`
+    : `Tempo se hýbe (průměr ${bpm} BPM) – mřížka jde podle ťuků, za ${fmtT(g.tapEnd)} odhad. Pro jistotu ťukej až do konce.`);
 }
 
 // ---------- krok 2: akordy ----------
@@ -184,8 +219,27 @@ function panelChords() {
         h('button', { title: 'Vrátit poslední ťuk', disabled: !FAC.idx, onclick: () => { alUndo(); FAC.idx = Math.max(0, FAC.idx - 1); renderAlongBody(); } }, '↶ Ťuk'),
         h('button', { title: 'Začít od prvního akordu po startu', onclick: () => { FAC.idx = -1; alSeek(Math.max(0, (AL.sync.start ?? 0) - 2)); renderAlongBody(); } }, '⏮ Od startu'),
         h('button', { title: 'Další ťuk patří prvnímu akordu po tomhle místě', onclick: () => { const t = alNow(); FAC.idx = Math.max(0, seq.findIndex(c => (c.t ?? 0) >= t - 0.3)); renderAlongBody(); } }, '↪ Odsud'),
+        h('button', { title: 'Každý akord posunout na nejbližší dobu nové mřížky (jde vrátit ↶)', onclick: snapAllChords }, '🧲 Všechny na doby'),
         h('button', { class: 'fac-ok', onclick: () => setStage('done') }, '✓ Hotovo, dál'))),
     h('div', { class: 'tl-hint' }, 'Pusť písničku a ťukni K pokaždé, když se změní akord (zvýrazněný blok na ose). Přicvakne se na dobu, se Shiftem přesně.'));
+}
+
+/** všechny akordy na nejbližší dobu (dva akordy na jednu dobu → druhý zůstane, kde byl) */
+function snapAllChords() {
+  if (!AL.sync?.beats?.length) return;
+  pushSyncUndo();
+  let moved = 0, last = -1;
+  const all = AL.model.lines.flatMap(L => L.chords.filter(c => c.t != null).map(c => ({ L, c })))
+    .sort((x, y) => x.c.t - y.c.t);
+  for (const { L, c } of all) {
+    const to = nearestBeat(c.t);
+    if (Math.abs(to - last) < 0.01) { last = c.t; continue; }
+    if (Math.abs(to - c.t) > 0.001) { shiftSync('chord', L, c, to - c.t); moved++; }
+    last = to;
+  }
+  commitSync();
+  renderAlongBody();
+  toast(`🧲 ${moved} akordů přicvaknuto na doby.`);
 }
 
 function tapChord(t) {
