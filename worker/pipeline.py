@@ -284,7 +284,25 @@ def chord_items(lines, wsync, step=2.0):
     return items
 
 
-def snap_chords(items, beats, C, dur, shift=0, EARLY=2.0, LATE=1.0, FREE=24.0, LAMBDA=0.35):
+def find_bars(beats, C):
+    """kde začínají takty: harmonie se mění hlavně na 1. dobu → pro metrum 4 a 3 a každou fázi
+    změří, jak moc se na těch dobách mění chroma oproti ostatním. Vrací (metrum, fáze, kontrast)."""
+    fr = lambda t: int(min(len(C) - 1, max(0, round(t / HOP))))
+    B = np.array([C[fr(a):max(fr(a) + 1, fr(b))].mean(0) for a, b in zip(beats[:-1], beats[1:])])
+    B = B / (np.linalg.norm(B, axis=1, keepdims=True) + 1e-9)
+    nov = np.r_[0.0, 1 - (B[1:] * B[:-1]).sum(1)]          # změna harmonie na začátku doby i
+    best = (4, 0, 0.0)
+    for m in (4, 3):
+        for ph in range(m):
+            on = nov[ph::m]
+            off = np.delete(nov, np.arange(ph, len(nov), m))
+            c = float(on.mean() - off.mean()) / (float(nov.std()) + 1e-9)
+            if c > best[2] * (1.0 if m == 4 else 1.15):        # 3/4 jen když je jasně lepší
+                best = (m, ph, c)
+    return best
+
+
+def snap_chords(items, beats, C, dur, shift=0, bars=None, BAR=1.5, EARLY=2.0, LATE=1.0, FREE=24.0, LAMBDA=0.35):
     types = {}
     for it in items:
         types.setdefault(it['key'], len(types))
@@ -303,10 +321,18 @@ def snap_chords(items, beats, C, dur, shift=0, EARLY=2.0, LATE=1.0, FREE=24.0, L
             j = np.array([int(np.abs(beats - it['t']).argmin())])
         cands.append(j)
 
+    def barb(j):
+        # bonus za 1. dobu taktu (a menší za polovinu taktu ve 4/4) – akordy se mění hlavně tam
+        if not bars:
+            return 0.0
+        m, ph, _ = bars
+        r = (j - ph) % m
+        return BAR if r == 0 else (BAR * 0.4 if m == 4 and r == 2 else 0.0)
+
     def prior(k, j):
         if items[k].get('free'):
-            return 0.0
-        return -LAMBDA * max(0.0, abs(beats[j] - items[k]['t']) / bl - 0.5)
+            return barb(j)
+        return barb(j) - LAMBDA * max(0.0, abs(beats[j] - items[k]['t']) / bl - 0.5)
 
     dp = [dict() for _ in range(K)]
     bk = [dict() for _ in range(K)]
@@ -418,19 +444,22 @@ def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print
             continue
         if best is None or best[3] is None:
             shift, fit_words = detect_shift(its, C, dur)
-        snap_chords(its, bts, C, dur, shift=shift)
+        bars = find_bars(bts, C)
+        snap_chords(its, bts, C, dur, shift=shift, bars=bars if bars[2] >= 0.4 else None)
         f, _ = chord_fit(its, C, dur, shift)
         dev = [abs(it['time'] - it['t']) for it in its if not it.get('free')]
         mdev = float(np.mean(dev)) if dev else 0.0
         score = (f or 0) - 10 * mdev          # shoda akordů, ale ať neutíkají od svých slov
         log('tempo %.1f BPM: akordy sedí %s %%, průměrně %.2f s od slova' % (60 / float(np.median(np.diff(bts))), f, mdev))
         if best is None or best[2] is None or score > best[5]:
-            best = (bts, its, f, shift, fit_words, score)
+            best = (bts, its, f, shift, fit_words, score, bars)
     beats, items = best[0], best[1]
     stats.update(beat=round(float(np.median(np.diff(beats))), 4), bpm=round(60 / float(np.median(np.diff(beats))), 1), beats=len(beats))
     log('doby: %d, tempo %.1f BPM' % (len(beats), stats['bpm']))
     if items and C is not None:
         shift, fit_words = best[3], best[4]
+        if len(best) > 6:
+            stats.update(meter=best[6][0], barContrast=round(best[6][2], 2), barsUsed=best[6][2] >= 0.4)
         fit, n = chord_fit(items, C, dur, shift)
         if fit is not None and fit < fit_words - 8:
             # přicvaknutí na doby akordy zhoršilo (špatně odhadnuté tempo) → zpívané akordy zpět k jejich slovům
