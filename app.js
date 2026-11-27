@@ -2122,6 +2122,7 @@ document.addEventListener('keydown', e => {
   }
   if (route.view === 'along' && !typing) {
     if (e.key === ' ') { e.preventDefault(); alToggle(); }
+    else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); alRedo(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); alUndo(); }
     else if (AL.edit && AL.tap && k === 'j') { e.preventDefault(); tlTap(e.shiftKey); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {

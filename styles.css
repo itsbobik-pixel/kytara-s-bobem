@@ -732,7 +732,7 @@ a.tbtn { text-decoration: none; color: inherit; display: inline-flex; align-item
 .tl-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .tl-hint { flex: 1; font-size: 12.5px; color: var(--muted); }
 .tl-tools .tbtn { padding: 2px 11px; }
-.tl-area { position: relative; height: 172px; overflow: hidden; border-radius: 10px; background: var(--surface-2); touch-action: none; cursor: crosshair; }
+.tl-area { position: relative; height: 190px; overflow: hidden; border-radius: 10px; background: var(--surface-2); touch-action: none; cursor: crosshair; }
 .tl-area canvas { position: absolute; inset: 0; }
 .tl-lab { position: absolute; left: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); opacity: .6; pointer-events: none; z-index: 1; }
 .tl-items { position: absolute; inset: 0; }
@@ -850,3 +850,7 @@ body.al-editing .al-yt { bottom: 236px; }
 .account-card .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .form-ok { margin: 0; font-size: 14px; color: var(--muted); }
 .al-lead { font-size: 13px; font-weight: 600; padding: 0 6px; white-space: nowrap; }
+/* editor časů: přehled celé písničky */
+.tl-over { position: relative; height: 14px; margin: 2px 0 6px; border-radius: 7px; background: var(--surface-2); cursor: pointer; touch-action: none; overflow: hidden; }
+.tl-over-win { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--d3) 35%, transparent); border: 1.5px solid var(--d3); border-radius: 7px; box-sizing: border-box; pointer-events: none; }
+.tl-over-head { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--d0); pointer-events: none; }
