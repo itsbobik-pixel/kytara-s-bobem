@@ -314,9 +314,9 @@ window.KSB_SUPA = (() => {
             let res;
             if (auth.anon) {
               // host (přidal songy bez účtu) → z anonymního účtu udělat normální, songy mu zůstanou
-              res = await sb.auth.updateUser({ email, password: st.pass, data: { name } }, { emailRedirectTo: backUrl() });
+              res = await sb.auth.updateUser({ email, password: st.pass, data: { name, has_password: true } }, { emailRedirectTo: backUrl() });
             } else {
-              res = await sb.auth.signUp({ email, password: st.pass, options: { data: { name }, emailRedirectTo: backUrl() } });
+              res = await sb.auth.signUp({ email, password: st.pass, options: { data: { name, has_password: true }, emailRedirectTo: backUrl() } });
               if (!res.error && res.data?.user && !res.data.user.identities?.length) {
                 err.textContent = 'Tenhle e-mail už je registrovaný. Přihlas se, nebo si nech poslat nové heslo.';
                 return;
@@ -376,7 +376,7 @@ window.KSB_SUPA = (() => {
         onsubmit: async e => {
           e.preventDefault();
           if (pass.length < 6) { err.textContent = 'Aspoň 6 znaků.'; return; }
-          const { error } = await sb.auth.updateUser({ password: pass });
+          const { error } = await sb.auth.updateUser({ password: pass, data: { has_password: true } });
           if (error) { err.textContent = 'Heslo se nepodařilo uložit. Zkus to znovu.'; return; }
           closeModal(); toast('Heslo nastavené ✓');
         },
@@ -486,6 +486,26 @@ window.KSB_SUPA = (() => {
     return data.status;
   }
 
+  /** stránka Nastavení účtu */
+  function accountInfo() {
+    const u = auth.user || {};
+    const providers = (u.app_metadata?.providers || (u.app_metadata?.provider ? [u.app_metadata.provider] : []))
+      .map(p => p === 'email' ? 'e-mail' : p === 'google' ? 'Google' : p);
+    return { email: u.email || '', providers, hasPassword: !!u.user_metadata?.has_password };
+  }
+  async function saveName(name) {
+    const timeout = new Promise(r => setTimeout(() => r({ error: { message: 'timeout' } }), 12000));
+    const { error } = await Promise.race([sb.auth.updateUser({ data: { name } }), timeout]);
+    if (error) return false;
+    auth.name = name;
+    return true;
+  }
+  async function setPassword(password) {
+    const timeout = new Promise(r => setTimeout(() => r({ error: { message: 'timeout' } }), 12000));
+    const { error } = await Promise.race([sb.auth.updateUser({ password, data: { has_password: true } }), timeout]);
+    return !error;
+  }
+
   /** značení akordů do nastavení účtu (ať platí na všech zařízeních) */
   function saveNotation(n) {
     setTimeout(() => { sb.auth.updateUser({ data: { notation: n } }).catch(() => { /* nic, zůstane aspoň v prohlížeči */ }); }, 0);
@@ -516,5 +536,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
 })();

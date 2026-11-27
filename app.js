@@ -516,6 +516,7 @@ function parseHash() {
   const m = /^#(song|play|along)-([A-Za-z0-9]+)$/.exec(location.hash);
   if (m && m[1] === 'along') return { view: 'along', id: m[2], mode: 'play' };
   if (m) return { view: 'song', id: m[2], mode: m[1] === 'play' ? 'play' : 'edit' };
+  if (location.hash === '#ucet') return { view: 'account' };
   return { view: 'list' };
 }
 function go(hash) { location.hash = hash; }
@@ -548,7 +549,9 @@ function render() {
   }
   document.documentElement.style.setProperty('--fs', settings.fontSize + 'px');
   if (route.view === 'along') renderAlong();
-  else if (route.view === 'song') renderEditor(); else renderLibrary();
+  else if (route.view === 'song') renderEditor();
+  else if (route.view === 'account') renderAccount();
+  else renderLibrary();
 }
 
 // =========================================================
@@ -582,18 +585,87 @@ function setNotation(n) {
 }
 
 function openAccountMenu(anchor) {
-  const opt = (n, label, hint) => h('button', {
-    class: 'chip' + (settings.notation === n ? ' armed' : ''), title: hint,
-    onclick: () => { closePopover(); setNotation(n); },
-  }, label);
   openPopover(anchor, h('div', { class: 'account-menu' },
     h('h5', {}, '👤 ', auth.name || 'Můj účet', auth.admin ? ' (admin)' : ''),
-    h('h5', { style: 'margin-top:10px' }, 'Značení akordů'),
-    h('div', { class: 'chips' },
-      opt('intl', 'B – mezinárodní', 'A#, B (jako v angličtině)'),
-      opt('cz', 'H – české', 'B = A#, H = B')),
-    h('div', { class: 'row', style: 'margin-top:12px' },
+    h('div', { class: 'menu-list' },
+      h('button', { class: 'btn ghost', onclick: () => { closePopover(); go('#ucet'); } }, '⚙ Nastavení účtu'),
       h('button', { class: 'btn ghost', onclick: () => { closePopover(); window.KSB_SUPA.logout(); } }, 'Odhlásit'))));
+}
+
+// ---------- stránka Nastavení účtu (#ucet) ----------
+function renderAccount() {
+  const app = $('#app');
+  app.innerHTML = '';
+  document.body.classList.remove('playing');
+  renderTopActions();
+  const wrap = h('div', { class: 'wrap account' });
+  if (auth.mode !== 'supabase' || !auth.user || auth.anon) {
+    wrap.append(h('div', { class: 'empty' },
+      h('div', { class: 'big-emoji' }, '👤'), h('h2', {}, 'Nastavení účtu'),
+      h('p', {}, 'Nejdřív se přihlas.'),
+      h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => window.KSB_SUPA.openLogin() }, 'Přihlásit'),
+        h('a', { class: 'btn ghost', href: '#' }, '← Zpět na songy'))));
+    app.append(wrap);
+    return;
+  }
+  const info = window.KSB_SUPA.accountInfo();
+  const section = (title, ...kids) => h('section', { class: 'card account-card' }, h('h3', {}, title), ...kids);
+
+  // přezdívka
+  let name = auth.name || '';
+  const nameMsg = h('p', { class: 'form-ok', role: 'status' });
+  const nameForm = h('form', {
+    onsubmit: async e => {
+      e.preventDefault();
+      const n = name.trim().slice(0, 40);
+      if (!n) { nameMsg.textContent = 'Napiš nějakou přezdívku.'; return; }
+      nameMsg.textContent = 'Ukládám…';
+      const ok = await window.KSB_SUPA.saveName(n);
+      nameMsg.textContent = ok ? '✓ Uloženo' : 'Nepodařilo se uložit, zkus to znovu.';
+      if (ok) renderTopActions();
+    },
+  },
+    h('label', { class: 'field' }, h('span', {}, 'Přezdívka (vidí ji ostatní u songů, které přidáš)'),
+      h('input', { maxlength: 40, value: name, oninput: e => (name = e.target.value) })),
+    h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'submit' }, 'Uložit přezdívku'), nameMsg));
+
+  // značení akordů
+  const opt = (n, label, hint) => h('button', {
+    class: 'chip' + (settings.notation === n ? ' armed' : ''), title: hint,
+    onclick: () => { setNotation(n); },
+  }, label);
+
+  // heslo
+  let pass = '';
+  const passMsg = h('p', { class: 'form-ok', role: 'status' });
+  const passForm = h('form', {
+    onsubmit: async e => {
+      e.preventDefault();
+      if (pass.length < 6) { passMsg.textContent = 'Aspoň 6 znaků.'; return; }
+      passMsg.textContent = 'Ukládám…';
+      const ok = await window.KSB_SUPA.setPassword(pass);
+      passMsg.textContent = ok ? '✓ Heslo nastavené' : 'Nepodařilo se uložit, zkus to znovu.';
+      if (ok) { pass = ''; e.target.reset(); }
+    },
+  },
+    h('label', { class: 'field' }, h('span', {}, info.hasPassword ? 'Nové heslo' : 'Nastavit heslo (pak se můžeš přihlašovat i e-mailem a heslem)'),
+      h('input', { type: 'password', minlength: 6, autocomplete: 'new-password', placeholder: 'aspoň 6 znaků', oninput: e => (pass = e.target.value) })),
+    h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'submit' }, info.hasPassword ? 'Změnit heslo' : 'Nastavit heslo'), passMsg));
+
+  wrap.append(
+    h('div', { class: 'account-head' }, h('a', { class: 'btn ghost', href: '#' }, '← Songy'), h('h1', {}, 'Nastavení účtu')),
+    section('Profil', nameForm,
+      h('p', { class: 'hint' }, 'E-mail: ', h('b', {}, info.email || '–'),
+        info.providers.length ? ' · přihlášení přes: ' + info.providers.join(', ') : '',
+        auth.admin ? ' · admin' : '')),
+    section('Značení akordů',
+      h('p', { class: 'sub' }, 'Jak se mají psát akordy, které leží mezi A a C.'),
+      h('div', { class: 'chips' },
+        opt('intl', 'B – mezinárodní (A#, B)', 'jako v angličtině'),
+        opt('cz', 'H – české (B = A#, H)', 'český zápis'))),
+    section('Heslo', passForm),
+    section('Odhlášení', h('button', { class: 'btn ghost', onclick: () => window.KSB_SUPA.logout() }, 'Odhlásit')));
+  app.append(wrap);
 }
 
 // =========================================================
