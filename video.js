@@ -123,6 +123,7 @@ function prepare(song) {
   const secEv = [];
   rows.forEach(r => { if (r.secStart || !secEv.length) secEv.push({ t: r.s - LEAD, sec: r.sec, label: r.label, color: SEC[r.sec] || SEC.verse }); });
   Object.assign(V, { song, chords, secEv, dur, total: PRE + dur + POST, baseRows: rows });
+  V.names = findNames();
 }
 
 // =========================================================
@@ -170,7 +171,72 @@ const THEMES = {
     },
     bg: (ctx, T, t) => bgBold(ctx, T, t),
   },
+  // ---- jen text (bez akordů a tóniny) – na zpívání ----
+  aurora: {
+    label: '✦ Aurora (jen text)', dark: true, noChords: true, prog: 'thin',
+    lyric: ['600', '"Fraunces", Georgia, serif'], title: ['600', '"Fraunces", Georgia, serif'],
+    ink: '#ffffff', inkA: 1, pastA: 1, hi: 'wipe', pop: 0, ui: '#ffffff', card: 'white',
+    wipe: { un: () => 'rgba(255,255,255,0.42)', sung: () => '#ffffff', glow: sc => mixHex(sc, '#ffffff', 0.2) },
+    lay: {
+      land: { fs: 92, cy: 540, slots: [[-2, -300], [-1, -165], [0, 0], [1, 170], [2, 295], [3, 400]], alphas: { p1: 0.38, n1: 0.85, n2: 0.5 } },
+      vert: { fs: 78, cy: 900, alphas: { p1: 0.38, n1: 0.85, n2: 0.5 } },
+    },
+    bg: (ctx, T, t) => bgAurora(ctx, T, t),
+  },
+  karaoke: {
+    label: '✦ Karaoke (jen text)', dark: true, noChords: true, mode: 'karaoke', prog: 'thin',
+    lyric: ['800', FONT], title: ['800', FONT], ink: '#ffffff', inkA: 1, pastA: 1, hi: 'wipe', pop: 0, ui: '#ffffff', card: 'grad',
+    wipe: { un: () => '#ffffff', sung: sc => mixHex(sc, '#ffffff', 0.12), glow: sc => sc, stroke: 'rgba(12,6,30,0.92)' },
+    lay: { land: { fs: 100, maxW: 1560 }, vert: { fs: 82, maxW: 960 } },
+    bg: (ctx, T, t) => bgKaraoke(ctx, T, t),
+  },
+  inkoust: {
+    label: '✦ Inkoust (jen text)', dark: true, noChords: true, prog: 'thin',
+    lyric: ['800', '"Playfair Display", Georgia, serif'], title: ['700', '"Grenze Gotisch", "Playfair Display", serif'],
+    ink: '#F3E7D3', inkA: 1, pastA: 1, hi: 'wipe', pop: 0, ui: '#F3E7D3', card: 'gold',
+    wipe: { un: () => 'rgba(243,231,211,0.5)', sung: () => '#F4C55B', glow: () => '#D7263D' },
+    lay: {
+      land: { fs: 86, cy: 545, maxW: 1500, slots: [[-2, -290], [-1, -160], [0, 0], [1, 165], [2, 285], [3, 390]], alphas: { p1: 0.32, n1: 0.8, n2: 0.42 } },
+      vert: { fs: 72, cy: 920, maxW: 900, alphas: { p1: 0.32, n1: 0.8, n2: 0.42 } },
+    },
+    bg: (ctx, T, t) => bgInk(ctx, T, t),
+  },
+  amores: {
+    label: '✦ Amores – podle coveru (jen text)', dark: true, noChords: true, prog: 'thin', coverCard: true, coverSmall: true, names: true,
+    lyric: ['400', '"Alfa Slab One", Georgia, serif'], title: ['400', '"Alfa Slab One", Georgia, serif'],
+    ink: '#F6E7C8', inkA: 1, pastA: 1, hi: 'wipe', pop: 0, ui: '#F6E7C8', card: 'gold',
+    wipe: { un: () => 'rgba(246,231,200,0.62)', sung: () => '#FFC93C', glow: () => '#E0301E', stroke: 'rgba(38,10,4,0.95)' },
+    lay: {
+      land: { fs: 78, cy: 560, maxW: 1240, slots: [[-2, -280], [-1, -155], [0, 0], [1, 160], [2, 275], [3, 380]], alphas: { p1: 0.35, n1: 0.85, n2: 0.45 } },
+      vert: { fs: 64, cy: 1000, maxW: 880, alphas: { p1: 0.35, n1: 0.85, n2: 0.45 } },
+    },
+    bg: (ctx, T, t) => bgWood(ctx, T, t),
+  },
+  jehla: {
+    label: '✦ Jehla (jen text)', dark: false, noChords: true, prog: 'thin',
+    lyric: ['700', '"Grenze Gotisch", "Playfair Display", serif'], title: ['700', '"Grenze Gotisch", "Playfair Display", serif'],
+    ink: '#1B1726', inkA: 1, pastA: 1, hi: 'wipe', pop: 0, ui: '#3A2418', card: 'ink',
+    wipe: { stencil: '#6A3FC0', sung: () => '#17131F', glow: () => '#C8323C' },
+    lay: {
+      land: { fs: 96, cy: 545, maxW: 1500, slots: [[-2, -300], [-1, -170], [0, 0], [1, 175], [2, 300], [3, 410]], alphas: { p1: 0.45, n1: 0.9, n2: 0.5 } },
+      vert: { fs: 80, cy: 920, maxW: 920, alphas: { p1: 0.45, n1: 0.9, n2: 0.5 } },
+    },
+    bg: (ctx, T, t) => bgSkin(ctx, T, t),
+  },
 };
+
+// jména holek z textu → vytetovaná srdíčka (téma Amores)
+const GIRL_NAMES = { Mirka: 'Mirka', Lenka: 'Lenka', 'Bára': 'Bára', Iva: 'Iva', 'Klára': 'Klára', 'Klárou': 'Klára', 'Kláru': 'Klára',
+  Jana: 'Jana', Petra: 'Petra', Lucie: 'Lucie', Eva: 'Eva', Hana: 'Hana', Monika: 'Monika', Katka: 'Katka', Pavla: 'Pavla', Zuzka: 'Zuzka', Verča: 'Verča', Míša: 'Míša', Emily: 'Emily' };
+function findNames() {
+  const out = [], seen = new Set();
+  V.baseRows.forEach(r => r.words.forEach(w => {
+    const word = r.text.slice(w.pos, w.pos + w.len).replace(/[^\p{L}]/gu, '');
+    const n = GIRL_NAMES[word];
+    if (n && !seen.has(n)) { seen.add(n); out.push({ name: n, t: w.s }); }
+  }));
+  return out;
+}
 
 // ---------- rozvržení ----------
 function layout(fmt, TH) {
@@ -204,7 +270,7 @@ function setFormat(fmt, theme) {
   cv.width = V.W; cv.height = V.H;
   V.ctx = cv.getContext('2d');
   V.measure = new Map();
-  V.rows = splitRows(V.baseRows);
+  V.rows = splitRows(V.TH.noChords ? V.baseRows.filter(r => !r.instr) : V.baseRows);
 }
 
 const lyricFont = size => `${V.TH.lyric[0]} ${size}px ${V.TH.lyric[1]}`;
@@ -422,6 +488,313 @@ function bgBold(ctx, T, t) {
   for (let i = 0; i < 160; i++) { ctx.fillStyle = `rgba(0,0,0,${rnd() * 0.06})`; ctx.fillRect(rnd() * W, rnd() * H, 3, 3); }
 }
 
+/** Aurora: tmavá noc, pomalu vlnící se polární záře v barvě části písně */
+function bgAurora(ctx, T, t) {
+  const { W, H } = V, M = Math.max(W, H);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#050817'); g.addColorStop(1, '#0b0a22');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const sc = secColor(t);
+  for (const p of PARTS) {   // hvězdy
+    ctx.fillStyle = `rgba(255,255,255,${p.a * 1.6 * (0.55 + 0.45 * Math.sin(T * 1.1 + p.ph * 5))})`;
+    ctx.fillRect(p.x * W, p.y * H, p.r * 0.5, p.r * 0.5);
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const cols = [sc, mixHex(sc, '#2EF2B8', 0.55), mixHex(sc, '#8B5CF6', 0.6), mixHex(sc, '#3DA9FF', 0.5)];
+  cols.forEach((c, n) => {
+    const yc = H * (0.22 + n * 0.17) + Math.sin(T * 0.09 + n * 1.7) * H * 0.06;
+    const amp = H * (0.05 + 0.02 * n), hh = H * (0.32 + 0.05 * Math.sin(T * 0.13 + n));
+    const gr = ctx.createLinearGradient(0, yc - hh / 2 - amp, 0, yc + hh / 2 + amp);
+    gr.addColorStop(0, rgba(c, 0)); gr.addColorStop(0.5, rgba(c, 0.3 - n * 0.035)); gr.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = gr;
+    ctx.beginPath();
+    const yAt = (x, s) => yc + s * hh / 2 + Math.sin(x / W * 6.283 * (1.1 + n * 0.3) + T * (0.25 + n * 0.07) + n) * amp
+      + Math.sin(x / W * 6.283 * 2.7 - T * 0.17 + n * 2) * amp * 0.4;
+    ctx.moveTo(0, yAt(0, -1));
+    for (let x = 0; x <= W; x += 40) ctx.lineTo(x, yAt(x, -1));
+    for (let x = W; x >= 0; x -= 40) ctx.lineTo(x, yAt(x, 1));
+    ctx.closePath(); ctx.fill();
+  });
+  ctx.restore();
+  blob(ctx, W * 0.5, H * 1.05, M * 0.55, sc, 0.16);
+  // ztlumení středu za textem
+  const tg = ctx.createRadialGradient(W / 2, V.L.cy, 0, W / 2, V.L.cy, M * 0.5);
+  tg.addColorStop(0, 'rgba(5,8,23,0.45)'); tg.addColorStop(1, 'rgba(5,8,23,0)');
+  ctx.fillStyle = tg; ctx.fillRect(0, 0, W, H);
+  vignette(ctx, 0.7, '2,3,10');
+}
+
+/** Karaoke: barevný gradient části + rozmazená světla (bokeh), dole ztmavené pro text */
+function bgKaraoke(ctx, T, t) {
+  const { W, H } = V;
+  const sc = secColor(t);
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, mixHex(sc, '#1a0b3d', 0.55)); g.addColorStop(1, mixHex(sc, '#05020f', 0.82));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const p of PARTS.slice(0, 34)) {
+    const x = ((p.x * W + T * p.v * 0.8 * (p.s - 0.4)) % (W + 300) + W + 300) % (W + 300) - 150;
+    const y = p.y * H * 0.8 + Math.sin(T * 0.3 + p.ph) * 40;
+    const r = 30 + p.r * 22, c = p.k % 2 ? mixHex(sc, '#ffffff', 0.5) : mixHex(DEG[p.k], sc, 0.5);
+    const gr = ctx.createRadialGradient(x, y, r * 0.2, x, y, r);
+    gr.addColorStop(0, rgba(c, p.a * 0.9)); gr.addColorStop(0.8, rgba(c, p.a * 0.5)); gr.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  }
+  const dg = ctx.createLinearGradient(0, H * 0.45, 0, H);
+  dg.addColorStop(0, 'rgba(6,3,18,0)'); dg.addColorStop(1, 'rgba(6,3,18,0.78)');
+  ctx.fillStyle = dg; ctx.fillRect(0, H * 0.45, W, H * 0.55);
+  vignette(ctx, 0.5);
+}
+
+/** Inkoust: tetovací estetika – tmavý papír, kouř inkoustu, zlatý rámeček s hvězdami */
+const STARS = (() => { const rnd = seeded(31); return Array.from({ length: 14 }, () => ({ x: rnd(), y: rnd(), s: 8 + rnd() * 14, ph: rnd() * 6.28, v: rnd() - 0.5 })); })();
+function star(ctx, x, y, r, rot) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const rr2 = i % 2 ? r * 0.28 : r; const a = i * Math.PI / 4; ctx.lineTo(Math.cos(a) * rr2, Math.sin(a) * rr2); }
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function bgInk(ctx, T, t) {
+  const { W, H } = V, M = Math.max(W, H);
+  ctx.fillStyle = '#130f0e'; ctx.fillRect(0, 0, W, H);
+  const sc = secColor(t);
+  blob(ctx, W * (0.18 + 0.06 * Math.sin(T * 0.07)), H * (0.25 + 0.06 * Math.cos(T * 0.06)), M * 0.5, '#8E1B2C', 0.32);
+  blob(ctx, W * (0.85 + 0.05 * Math.cos(T * 0.05)), H * (0.8 + 0.05 * Math.sin(T * 0.08)), M * 0.5, '#0F5560', 0.34);
+  blob(ctx, W * 0.5, H * 0.5, M * 0.4, mixHex(sc, '#8E1B2C', 0.6), 0.10);
+  // papírové zrno
+  const rnd = seeded(Math.floor(T * 12) * 97 + 3);
+  for (let i = 0; i < 220; i++) { ctx.fillStyle = `rgba(243,231,211,${rnd() * 0.035})`; ctx.fillRect(rnd() * W, rnd() * H, 2, 2); }
+  // dvojitý zlatý rámeček
+  const p = V.L.land ? 44 : 40;
+  ctx.strokeStyle = 'rgba(214,170,90,0.42)'; ctx.lineWidth = 2;
+  ctx.strokeRect(p, p, W - 2 * p, H - 2 * p);
+  ctx.strokeStyle = 'rgba(214,170,90,0.22)'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(p + 12, p + 12, W - 2 * p - 24, H - 2 * p - 24);
+  ctx.fillStyle = 'rgba(214,170,90,0.7)';
+  [[p, p], [W - p, p], [p, H - p], [W - p, H - p]].forEach(([x, y]) => star(ctx, x, y, 16, Math.PI / 8));
+  // hvězdičky
+  for (const s of STARS) {
+    ctx.fillStyle = `rgba(214,170,90,${0.12 + 0.1 * Math.sin(T * 0.8 + s.ph)})`;
+    star(ctx, p + 40 + s.x * (W - 2 * p - 80), p + 40 + s.y * (H - 2 * p - 80), s.s, T * 0.2 * s.v + s.ph);
+  }
+  vignette(ctx, 0.75, '0,0,0');
+}
+
+/** offscreen textura (spočítá se jednou pro daný formát) */
+function cachedLayer(key, paint) {
+  V.layers = V.layers || {};
+  const k = key + V.W + 'x' + V.H;
+  if (!V.layers[k]) {
+    const c = document.createElement('canvas'); c.width = V.W; c.height = V.H;
+    paint(c.getContext('2d'), V.W, V.H);
+    V.layers[k] = c;
+  }
+  return V.layers[k];
+}
+
+/** Amores: tmavá dřevěná prkna jako na coveru alba */
+function paintWood(g, W, H) {
+  const rnd = seeded(99);
+  const pw = W > H ? 240 : 216;
+  for (let x = -rnd() * 60; x < W; x += pw) {
+    const base = mixHex('#2e1a0e', '#5b3620', rnd());
+    const pg = g.createLinearGradient(x, 0, x + pw, 0);
+    pg.addColorStop(0, mixHex(base, '#000000', 0.25)); pg.addColorStop(0.5, base); pg.addColorStop(1, mixHex(base, '#000000', 0.3));
+    g.fillStyle = pg; g.fillRect(x, 0, pw, H);
+    for (let i = 0; i < 46; i++) {   // léta dřeva
+      const gx = x + rnd() * pw, f = 0.002 + rnd() * 0.004, amp = 3 + rnd() * 10, ph = rnd() * 6;
+      g.strokeStyle = rnd() < 0.5 ? `rgba(15,7,2,${0.12 + rnd() * 0.2})` : `rgba(255,200,140,${0.03 + rnd() * 0.05})`;
+      g.lineWidth = 0.8 + rnd() * 2.2;
+      g.beginPath();
+      for (let y = 0; y <= H; y += 24) g.lineTo(gx + Math.sin(y * f + ph) * amp + Math.sin(y * f * 3.3) * amp * 0.3, y);
+      g.stroke();
+    }
+    if (rnd() < 0.6) {   // suk
+      const kx = x + pw * (0.3 + rnd() * 0.4), ky = rnd() * H;
+      for (let r = 4; r < 34; r += 5) { g.strokeStyle = `rgba(20,9,3,${0.35 - r * 0.008})`; g.lineWidth = 2; g.beginPath(); g.ellipse(kx, ky, r * 0.6, r * 1.6, 0, 0, 6.283); g.stroke(); }
+    }
+    g.fillStyle = '#0d0603'; g.fillRect(x, 0, 5, H);
+    g.fillStyle = 'rgba(255,210,160,0.07)'; g.fillRect(x + 5, 0, 2, H);
+  }
+}
+function star5(ctx, x, y, r, glow) {
+  const path = (R) => { ctx.beginPath(); for (let i = 0; i < 10; i++) { const rr2 = i % 2 ? R * 0.42 : R, a = -Math.PI / 2 + i * Math.PI / 5; ctx.lineTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2); } ctx.closePath(); };
+  ctx.save();
+  ctx.shadowColor = '#FFB347'; ctx.shadowBlur = glow;
+  path(r); const sg = ctx.createLinearGradient(x, y - r, x, y + r); sg.addColorStop(0, '#FFF1B0'); sg.addColorStop(1, '#E39A1E');
+  ctx.fillStyle = sg; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.lineWidth = r * 0.12; ctx.strokeStyle = '#2a1206'; ctx.stroke();
+  path(r * 0.45); ctx.fillStyle = '#D42A1A'; ctx.fill();
+  ctx.restore();
+}
+/** old-school tetování: srdce s páskou a jménem */
+function tattooHeart(ctx, x, y, s, name, k, rot) {
+  if (k <= 0) return;
+  const sc = k < 1 ? 0.3 + 0.7 * (1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2)) : 1;
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot); ctx.scale(sc, sc);
+  ctx.globalAlpha *= clamp(k * 3);
+  const heart = () => { ctx.beginPath(); ctx.moveTo(0, s * 0.62); ctx.bezierCurveTo(-s * 1.15, -s * 0.05, -s * 0.62, -s * 0.95, 0, -s * 0.42); ctx.bezierCurveTo(s * 0.62, -s * 0.95, s * 1.15, -s * 0.05, 0, s * 0.62); ctx.closePath(); };
+  ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = s * 0.2; ctx.shadowOffsetY = s * 0.06;
+  heart(); const hg = ctx.createLinearGradient(0, -s * 0.8, 0, s * 0.6); hg.addColorStop(0, '#F2452C'); hg.addColorStop(1, '#8E140F');
+  ctx.fillStyle = hg; ctx.fill(); ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.lineWidth = s * 0.075; ctx.strokeStyle = '#120806'; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.beginPath(); ctx.ellipse(-s * 0.42, -s * 0.42, s * 0.12, s * 0.07, -0.7, 0, 6.283); ctx.fill();
+  // páska
+  const bw = s * 1.05, bh = s * 0.36, by = s * 0.02;
+  ctx.fillStyle = '#C9A66B';
+  [-1, 1].forEach(d => { ctx.beginPath(); ctx.moveTo(d * bw * 0.8, by - bh * 0.3); ctx.lineTo(d * (bw + s * 0.32), by - bh * 0.15); ctx.lineTo(d * (bw + s * 0.18), by + bh * 0.35); ctx.lineTo(d * (bw + s * 0.32), by + bh * 0.85); ctx.lineTo(d * bw * 0.8, by + bh * 0.7); ctx.closePath(); ctx.fill(); ctx.lineWidth = s * 0.05; ctx.stroke(); });
+  ctx.beginPath(); ctx.moveTo(-bw, by - bh / 2); ctx.quadraticCurveTo(0, by - bh / 2 - s * 0.16, bw, by - bh / 2);
+  ctx.lineTo(bw, by + bh / 2); ctx.quadraticCurveTo(0, by + bh / 2 - s * 0.16, -bw, by + bh / 2); ctx.closePath();
+  ctx.fillStyle = '#F4E3B5'; ctx.fill(); ctx.lineWidth = s * 0.06; ctx.stroke();
+  ctx.fillStyle = '#7A120C'; ctx.font = `700 ${s * 0.36}px Caveat, cursive`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(name, 0, by - s * 0.06);
+  ctx.restore();
+}
+const TAT_POS = {
+  land: [[190, 380, -0.12], [1730, 350, 0.1], [200, 700, 0.08], [1720, 680, -0.1], [190, 960, -0.05], [1730, 950, 0.12]],
+  vert: [[220, 420, -0.12], [860, 440, 0.1], [230, 1600, 0.08], [850, 1620, -0.1], [540, 1770, 0.04], [540, 330, -0.04]],
+};
+function bgWood(ctx, T, t) {
+  const { W, H } = V, L = V.L;
+  ctx.drawImage(cachedLayer('wood', paintWood), 0, 0);
+  const sp = ctx.createRadialGradient(W / 2, H * 0.05, 0, W / 2, H * 0.05, Math.max(W, H) * 0.7);
+  sp.addColorStop(0, 'rgba(255,170,80,0.2)'); sp.addColorStop(1, 'rgba(255,170,80,0)');
+  ctx.fillStyle = sp; ctx.fillRect(0, 0, W, H);
+  const dk = ctx.createRadialGradient(W / 2, L.cy, 0, W / 2, L.cy, Math.max(W, H) * 0.45);
+  dk.addColorStop(0, 'rgba(10,4,1,0.55)'); dk.addColorStop(1, 'rgba(10,4,1,0)');
+  ctx.fillStyle = dk; ctx.fillRect(0, 0, W, H);
+  // hvězdy jako na coveru
+  const sy = L.land ? 190 : 330, gap = L.land ? 120 : 110;
+  [-2, -1, 0, 1, 2].forEach(n => {
+    const r = (n === 0 ? 34 : Math.abs(n) === 1 ? 26 : 20) * (L.land ? 1 : 1.1);
+    star5(ctx, W / 2 + n * gap, sy + Math.abs(n) * 18, r * (1 + 0.04 * Math.sin(T * 2 + n)), 16 + 10 * (0.5 + 0.5 * Math.sin(T * 1.7 + n * 1.3)));
+  });
+  // sbírka jmen – vytetovaná srdce
+  const pos = TAT_POS[L.land ? 'land' : 'vert'];
+  (V.names || []).forEach((n, i) => {
+    const p = pos[i % pos.length], k = clamp((t - n.t + 0.05) / 0.45);
+    const buzz = t - n.t < 0.35 && t > n.t ? Math.sin(t * 140) * 2.5 : 0;
+    tattooHeart(ctx, p[0] + buzz, p[1], L.land ? 106 : 104, n.name, k, p[2]);
+  });
+  vignette(ctx, 0.8, '8,3,0');
+}
+
+/** Jehla: kůže s jemnou texturou a vybledlými starými tetováními */
+function paintSkin(g, W, H) {
+  const bg = g.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#EFCDB0'); bg.addColorStop(1, '#D9A889');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const rnd = seeded(5);
+  for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(120,64,40,${rnd() * 0.07})`; g.fillRect(rnd() * W, rnd() * H, 1.5 + rnd() * 1.5, 1.5 + rnd() * 1.5); }
+  for (let i = 0; i < 90; i++) {   // jemné vrásky kůže
+    const x = rnd() * W, y = rnd() * H, l = 30 + rnd() * 90, a = rnd() * 3.14;
+    g.strokeStyle = `rgba(140,80,55,${0.05 + rnd() * 0.06})`; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a) * l * 0.5 + 8, y + Math.sin(a) * l * 0.5, x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  g.save(); g.globalAlpha = 0.13; g.filter = 'blur(2px)';
+  const old = W > H ? [[200, 210, 70], [1720, 860, 90], [1690, 190, 50], [260, 900, 55]] : [[180, 300, 70], [900, 1680, 90], [880, 320, 50], [200, 1700, 55]];
+  old.forEach(([x, y, r]) => {
+    g.fillStyle = '#2C3E63'; g.beginPath();
+    for (let i = 0; i < 10; i++) { const rr2 = i % 2 ? r * 0.42 : r, a = -Math.PI / 2 + i * Math.PI / 5; g.lineTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2); }
+    g.closePath(); g.fill();
+  });
+  g.restore();
+  const v = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+  v.addColorStop(0, 'rgba(90,40,20,0)'); v.addColorStop(1, 'rgba(90,40,20,0.4)');
+  g.fillStyle = v; g.fillRect(0, 0, W, H);
+}
+function bgSkin(ctx, T, t) {
+  ctx.drawImage(cachedLayer('skin', paintSkin), 0, 0);
+  const { W, H } = V;
+  const lg = ctx.createRadialGradient(W * (0.3 + 0.05 * Math.sin(T * 0.1)), H * 0.2, 0, W * 0.3, H * 0.2, Math.max(W, H) * 0.6);
+  lg.addColorStop(0, 'rgba(255,240,225,0.25)'); lg.addColorStop(1, 'rgba(255,240,225,0)');
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
+}
+
+/** Jehla: nezazpívané = fialový předkreslený obrys, zazpívané = vytetováno inkoustem, na čele jehla */
+function drawStencil(ctx, r, text, x0, base, fs, X, fx, t, isCur) {
+  const WP = V.TH.wipe, BIG = 1e5;
+  ctx.font = lyricFont(fs); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
+  if (isCur && fx > x0 && fx < BIG) {   // čerstvě tetované – lehce zarudlá kůže
+    const cx = fx - fs * 0.9, cy = base - fs * 0.35, R = fs * 1.5;
+    const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    rg.addColorStop(0, 'rgba(205,60,60,0.2)'); rg.addColorStop(1, 'rgba(205,60,60,0)');
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(1.5, 0.7); ctx.translate(-cx, -cy);
+    ctx.fillStyle = rg; ctx.fillRect(cx - R, cy - R, R * 2, R * 2); ctx.restore();
+  }
+  if (fx < BIG) {
+    ctx.save(); ctx.beginPath(); ctx.rect(Math.max(x0 - 200, fx), base - fs * 2, BIG, fs * 3); ctx.clip();
+    ctx.fillStyle = rgba(WP.stencil, 0.07); ctx.fillText(text, x0, base);
+    ctx.strokeStyle = rgba(WP.stencil, 0.85); ctx.lineWidth = Math.max(1.5, fs * 0.024); ctx.strokeText(text, x0, base);
+    ctx.restore();
+  }
+  if (fx > x0) {
+    ctx.save(); ctx.beginPath(); ctx.rect(x0 - 200, base - fs * 2, fx - x0 + 200, fs * 3); ctx.clip();
+    ctx.shadowColor = 'rgba(23,19,31,0.55)'; ctx.shadowBlur = fs * 0.035;
+    ctx.fillStyle = WP.sung(); ctx.fillText(text, x0, base);
+    ctx.restore();
+  }
+  // jehla
+  const active = isCur && fx > x0 && fx < BIG && r.words.some(w => t >= w.s - 0.05 && t <= w.e + 0.12);
+  if (active) {
+    const jx = fx + Math.sin(t * 120) * 1.2, jy = base - fs * 0.32 + Math.cos(t * 150) * 1.2;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#9AA3AE'; ctx.lineWidth = fs * 0.035;
+    ctx.beginPath(); ctx.moveTo(jx, jy); ctx.lineTo(jx + fs * 0.75, jy - fs * 1.15); ctx.stroke();
+    ctx.strokeStyle = '#2B2F36'; ctx.lineWidth = fs * 0.15;
+    ctx.beginPath(); ctx.moveTo(jx + fs * 0.75, jy - fs * 1.15); ctx.lineTo(jx + fs * 1.15, jy - fs * 1.8); ctx.stroke();
+    ctx.strokeStyle = '#C0C7D0'; ctx.lineWidth = fs * 0.05;
+    ctx.beginPath(); ctx.moveTo(jx + fs * 0.78, jy - fs * 1.22); ctx.lineTo(jx + fs * 1.1, jy - fs * 1.74); ctx.stroke();
+    ctx.fillStyle = 'rgba(23,19,31,0.7)';
+    const rnd = seeded(Math.floor(t * 30) + 11);
+    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(jx + (rnd() - 0.5) * fs * 0.3, jy + (rnd() - 0.2) * fs * 0.25, 1 + rnd() * 2, 0, 6.283); ctx.fill(); }
+    ctx.restore();
+  }
+}
+
+/** úvodní / závěrečná karta s coverem alba */
+function drawCoverCard(ctx, t, a, end) {
+  const L = V.L, s = V.song, TH = V.TH, land = L.land;
+  const S = land ? 560 : 700, lift = (1 - a) * 30;
+  const cx0 = land ? L.W / 2 - 600 : L.W / 2 - S / 2, cy0 = land ? L.H / 2 - S / 2 + 20 : 330;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.save();
+  ctx.translate(cx0 + S / 2, cy0 + S / 2 - lift); ctx.rotate(-0.035);
+  ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 22;
+  ctx.drawImage(V.cover, -S / 2, -S / 2, S, S);
+  ctx.restore();
+  const tx = land ? L.W / 2 + 40 : L.W / 2, ty = land ? L.H / 2 + 40 : cy0 + S + 230;
+  ctx.textAlign = land ? 'left' : 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.font = `500 ${land ? 42 : 44}px ${FONT}`; ctx.fillStyle = rgba(TH.ui, 0.75);
+  ctx.fillText(s.artist || '', tx, ty - 120 - lift);
+  const title = s.title || '', maxW = land ? 820 : 960;
+  let big = land ? 120 : 120;
+  ctx.font = `${TH.title[0]} ${big}px ${TH.title[1]}`;
+  const w0 = ctx.measureText(title).width;
+  if (w0 > maxW) { big *= maxW / w0; ctx.font = `${TH.title[0]} ${big}px ${TH.title[1]}`; }
+  const gg = ctx.createLinearGradient(0, ty - big, 0, ty);
+  gg.addColorStop(0, '#FFE6A3'); gg.addColorStop(0.5, '#FFC93C'); gg.addColorStop(1, '#D9841E');
+  ctx.lineJoin = 'round'; ctx.lineWidth = big * 0.12; ctx.strokeStyle = '#2a0d05';
+  ctx.shadowColor = 'rgba(224,48,30,0.8)'; ctx.shadowBlur = 30;
+  ctx.strokeText(title, tx, ty - lift); ctx.shadowBlur = 0;
+  ctx.fillStyle = gg; ctx.fillText(title, tx, ty - lift);
+  ctx.font = `600 34px ${FONT}`; ctx.fillStyle = rgba(TH.ui, 0.8);
+  ctx.fillText(end ? 'Díky za zpívání!  ·  playalong.cz' : 'zpívej s námi  ·  playalong.cz', tx, ty + 80 - lift);
+  const left = -t;
+  if (!end && left <= 3.2 && left > 0) {
+    const n = Math.ceil(left - 0.2);
+    if (n >= 1 && n <= 3) {
+      const f = 1 - (left - 0.2 - (n - 1));
+      ctx.font = `400 ${90 + 20 * (1 - f)}px ${TH.title[1]}`;
+      ctx.fillStyle = rgba('#FFC93C', 0.9 * (1 - f * 0.6));
+      ctx.fillText(String(n), tx, ty + 230);
+    }
+  }
+  ctx.restore();
+}
+
 // =========================================================
 //   PRVKY
 // =========================================================
@@ -538,6 +911,10 @@ function drawRow(ctx, r, y, scale, a, t, isCur, curChord, sc) {
   const chH = Math.max(26, fs * 0.62);
   const chY = y - fs * 0.62 - chH - fs * 0.14;
   let right = -1e9;
+  if (TH.hi === 'wipe') {
+    drawWipe(ctx, r, text, m, x0, base, fs, k, t, sc, isCur);
+    ctx.restore(); return;
+  }
   for (const c of [...r.chords].sort((p, q) => p.pos - q.pos)) {
     const w = chipW(ctx, chH, c.name, 0.64);
     let x = X(c.pos) - chH * 0.12;
@@ -574,6 +951,143 @@ function drawRow(ctx, r, y, scale, a, t, isCur, curChord, sc) {
     drawWord(ctx, text.slice(cw.pos, cw.pos + cw.len), xa, xb, base, fs, cw, t, sc);
   } else {
     clipX(pastEnd, BIG, () => ctx.fillText(text, x0, base));
+  }
+  ctx.restore();
+}
+
+/** kam až je řádek v čase t „zazpívaný“ (x v pixelech) – plynule po písmenkách */
+function wipeX(r, X, t, x0) {
+  const ws = r.words;
+  if (!ws.length || t < ws[0].s) return x0 - 1;
+  if (t >= ws[ws.length - 1].e) return 1e5;
+  let fx = x0 - 1;
+  for (const w of ws) {
+    if (t < w.s) break;
+    const p = clamp((t - w.s) / Math.max(0.08, w.e - w.s));
+    fx = X(w.pos) + (X(w.pos + w.len) - X(w.pos)) * p;
+  }
+  return fx;
+}
+
+/** text řádku: nezazpívaná část jednou barvou, zazpívaná druhou, s měkkým okrajem a září */
+function drawWipe(ctx, r, text, m, x0, base, fs, k, t, sc, isCur) {
+  const TH = V.TH, WP = TH.wipe;
+  const X = pos => x0 + prefX(m, pos, text.length) * k;
+  const tw = m.w * k;
+  const fx = wipeX(r, X, t, x0);
+  if (WP.stencil) { drawStencil(ctx, r, text, x0, base, fs, X, fx, t, isCur); return; }
+  const un = WP.un(sc), sung = WP.sung(sc);
+  ctx.font = lyricFont(fs);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  const soft = fs * 0.12;
+  let fill;
+  if (fx <= x0) fill = un;
+  else if (fx >= x0 + tw + soft) fill = sung;
+  else {
+    fill = ctx.createLinearGradient(x0, 0, x0 + tw + soft * 2, 0);
+    const span = tw + soft * 2, a = clamp((fx - x0 - soft) / span), b = clamp((fx - x0 + soft) / span);
+    fill.addColorStop(0, sung); fill.addColorStop(a, sung); fill.addColorStop(b, un); fill.addColorStop(1, un);
+  }
+  // světlo za hlasem: měkká záře pod právě zpívaným místem
+  if (isCur) {
+    const w = r.words.find(w => t >= w.s - 0.02 && t <= w.e + 0.3);
+    if (w) {
+      const on = Math.min(clamp((t - w.s + 0.02) / 0.12), 1 - clamp((t - w.e) / 0.3));
+      const gx = Math.min(fx, X(w.pos + w.len)) - fs * 0.15, gy = base - fs * 0.32, R = fs * 1.3;
+      const gg = ctx.createRadialGradient(gx, gy, 0, gx, gy, R);
+      gg.addColorStop(0, rgba(WP.glow(sc), 0.42 * on)); gg.addColorStop(1, rgba(WP.glow(sc), 0));
+      ctx.save(); ctx.translate(gx, gy); ctx.scale(1.6, 0.75); ctx.translate(-gx, -gy);
+      ctx.fillStyle = gg; ctx.fillRect(gx - R, gy - R, R * 2, R * 2);
+      ctx.restore();
+    }
+  }
+  if (WP.stroke) {
+    ctx.strokeStyle = WP.stroke; ctx.lineWidth = fs * 0.14;
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = fs * 0.2; ctx.shadowOffsetY = fs * 0.05;
+    ctx.strokeText(text, x0, base);
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  }
+  ctx.fillStyle = fill;
+  ctx.fillText(text, x0, base);
+  // záře jen za právě zpívaným úsekem aktuálního řádku
+}
+
+/** Karaoke: dva řádky dole, střídají se nahoře/dole jako v karaoke baru */
+function drawKaraoke(ctx, t, alpha) {
+  const L = V.L, rows = V.rows, sc = secColor(t);
+  if (!rows.length) return;
+  const i = rowAt(t);
+  const gapAfter = j => rows[j + 1] ? rows[j + 1].s - rows[j].e : 99;
+  const previewT = j => (j >= 0 && rows[j] && gapAfter(j) > 3.5) ? rows[j].e + 1.5 : Infinity;
+  let pair, fading = -1;
+  if (i < 0) pair = [0, 1];
+  else if (t >= previewT(i)) { pair = [i + 1, i + 2]; fading = i; }
+  else pair = [i, i + 1];
+  const appear = k => k <= 0 ? -1e9 : Math.min(rows[k - 1].s - LEAD, previewT(k - 2));
+  const fin = k => clamp((t - appear(k)) / 0.35);
+  const slotY = n => L.land ? (n ? 912 : 770) : (n ? 1500 : 1340);
+  const draws = [];
+  pair.forEach(k => { if (rows[k]) draws.push([k, fin(k)]); });
+  pair.forEach(k => { const o = k - 2; if (o >= 0 && !pair.includes(o) && o !== fading && fin(k) < 1) draws.push([o, 1 - fin(k)]); });
+  if (fading >= 0) draws.push([fading, 1 - clamp((t - previewT(fading)) / 0.4)]);
+  for (const [k, a] of draws) {
+    if (a <= 0.01) continue;
+    const r = rows[k], n = k % 2;
+    const text = shown(r.text), m = metrics(text);
+    const fs = Math.min(L.fs, L.fs * L.maxW / (m.w * L.fs / 100)), kk = fs / 100, tw = m.w * kk;
+    const x0 = !L.land ? L.cx - tw / 2 : n ? Math.min(L.W - 170 - tw, L.cx + 120 - tw / 2) : Math.max(170, L.cx - 120 - tw / 2);
+    ctx.save();
+    ctx.globalAlpha = a * alpha;
+    const y = slotY(n) + (1 - easeOut(a)) * 18;
+    drawWipe(ctx, r, text, m, x0, y, fs, kk, t, sc, k === i);
+    // odpočet před nástupem po pauze
+    const left = r.s - t;
+    if ((k === 0 || gapAfter(k - 1) > 3) && left > 0 && left < 3.2) {
+      for (let d = 0; d < 3; d++) {
+        const on = left <= 3 - d;
+        ctx.fillStyle = on ? mixHex(sc, '#ffffff', 0.35) : 'rgba(255,255,255,0.2)';
+        ctx.beginPath(); ctx.arc(x0 + 12 + d * 34, y - fs * 0.98, on ? 10 : 7, 0, 6.283); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+}
+
+/** jen text: interpret – název nahoře, vpravo část písně (bez tóniny) */
+function drawTitleLite(ctx, t, alpha) {
+  const L = V.L, s = V.song, TH = V.TH;
+  const ev = V.secEv[secAt(t)];
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.85;
+  const y = L.land ? 92 : 150;
+  let x = L.land ? L.pad + 40 : L.W / 2;
+  if (TH.coverSmall && V.cover && L.land) {
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 14;
+    ctx.drawImage(V.cover, x, y - 62, 84, 84); ctx.restore();
+    x += 104;
+  }
+  ctx.textAlign = L.land ? 'left' : 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.font = `${TH.title[0]} ${L.land ? 40 : 46}px ${TH.title[1]}`; ctx.fillStyle = TH.ui;
+  ctx.fillText(s.title || '', x, y);
+  const tw = ctx.measureText(s.title || '').width;
+  ctx.font = `500 ${L.land ? 26 : 30}px ${FONT}`; ctx.fillStyle = rgba(TH.ui, 0.6);
+  if (L.land) ctx.fillText(s.artist || '', x + tw + 20, y);
+  else ctx.fillText(s.artist || '', x, y + 46);
+  if (ev && t > -0.5) {
+    const k = easeOut((t - ev.t) / 0.6);
+    ctx.globalAlpha = alpha * 0.85 * k;
+    ctx.textAlign = L.land ? 'right' : 'center';
+    const ex = L.land ? L.W - L.pad - 40 : L.W / 2, ey = L.land ? y : y + 96;
+    ctx.font = `700 24px ${FONT}`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '5px';
+    const lw = ctx.measureText(ev.label.toUpperCase()).width;
+    ctx.fillStyle = TH.dark ? mixHex(ev.color, '#ffffff', 0.3) : mixHex(ev.color, '#000000', 0.35);
+    ctx.fillText(ev.label.toUpperCase(), ex, ey - 3);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    ctx.fillStyle = ev.color;
+    const dx = L.land ? ex - lw - 22 : ex - lw / 2 - 22;
+    ctx.beginPath(); ctx.arc(dx, ey - 11, 7, 0, 6.283); ctx.fill();
   }
   ctx.restore();
 }
@@ -854,6 +1368,7 @@ function drawProgress(ctx, t, alpha) {
 /** úvodní a závěrečná karta */
 function drawCard(ctx, t, a, end) {
   if (a <= 0.01) return;
+  if (V.TH.coverCard && V.cover) return drawCoverCard(ctx, t, a, end);
   const L = V.L, s = V.song, TH = V.TH;
   ctx.save();
   ctx.globalAlpha = a;
@@ -874,6 +1389,10 @@ function drawCard(ctx, t, a, end) {
     hg.addColorStop(0, '#FF5A5F'); hg.addColorStop(0.35, '#FFB020'); hg.addColorStop(0.7, '#FF6FB5'); hg.addColorStop(1, '#8B5CF6');
     ctx.fillStyle = TH.card === 'chrome' ? tg : hg;
     ctx.shadowColor = TH.card === 'chrome' ? '#FF3CC7' : 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 30;
+  } else if (TH.card === 'gold') {
+    const gg = ctx.createLinearGradient(0, y - big * 0.8, 0, y + 30);
+    gg.addColorStop(0, '#FFE6A3'); gg.addColorStop(0.5, '#F4C55B'); gg.addColorStop(1, '#B9832E');
+    ctx.fillStyle = gg; ctx.shadowColor = '#D7263D'; ctx.shadowBlur = 36;
   } else {
     ctx.fillStyle = TH.card === 'white' ? '#fff' : TH.card === 'black' ? '#111' : TH.ui;
   }
@@ -886,7 +1405,7 @@ function drawCard(ctx, t, a, end) {
   ctx.font = `600 34px ${FONT}`; ctx.fillStyle = rgba(TH.ui, 0.8);
   if (end) ctx.fillText('Díky za hraní!  ·  playalong.cz', cx, y + 120 - lift);
   else {
-    ctx.fillText('Tónina ' + NOTE[s.key.root] + (s.key.minor ? 'm' : '') + (s.capo ? '  ·  kapo ' + s.capo : '') + '  ·  play-along', cx, y + 120 - lift);
+    ctx.fillText(TH.noChords ? 'zpívej s námi  ·  playalong.cz' : 'Tónina ' + NOTE[s.key.root] + (s.key.minor ? 'm' : '') + (s.capo ? '  ·  kapo ' + s.capo : '') + '  ·  play-along', cx, y + 120 - lift);
     const left = -t;
     if (left <= 3.2 && left > 0) {
       const n = Math.ceil(left - 0.2);
@@ -917,10 +1436,10 @@ function draw(T) {
   const main = (1 - intro) * (1 - outro);
   drawCard(ctx, t, intro, false);
   drawCard(ctx, t, outro, true);
-  drawLyrics(ctx, t, main);
+  if (TH.mode === 'karaoke') drawKaraoke(ctx, t, main); else drawLyrics(ctx, t, main);
   if (TH.letterbox) letterbox(ctx);
-  drawHud(ctx, t, Math.max(0.35, 1 - outro));
-  drawTitle(ctx, t, main * clamp((t + 0.6) / 0.6));
+  if (!TH.noChords) drawHud(ctx, t, Math.max(0.35, 1 - outro));
+  (TH.noChords ? drawTitleLite : drawTitle)(ctx, t, main * clamp((t + 0.6) / 0.6));
   drawProgress(ctx, t, 1 - outro * 0.6);
 }
 window.renderAt = T => draw(T);
@@ -1064,10 +1583,21 @@ async function fetchSong(id) {
   return { id: row.id, title: row.title, artist: row.artist, ...row.data };
 }
 
+/** cover alba = náhled YouTube videa (u „art tracků“ je to čtvercový obal uprostřed) */
+async function loadCover(yt) {
+  try {
+    const r = await fetch(`https://i.ytimg.com/vi/${yt}/maxresdefault.jpg`, { mode: 'cors' });
+    if (!r.ok) return;
+    const bmp = await createImageBitmap(await r.blob());
+    const side = bmp.height;
+    V.cover = await createImageBitmap(bmp, (bmp.width - side) / 2, 0, side, side);
+  } catch { /* bez coveru */ }
+}
+
 async function loadFonts() {
   const sample = 'ÁČĎÉĚÍŇÓŘŠŤÚŮÝŽáčďéěíňóřšťúůýž Ab1';
   const list = ['500 40px Outfit', '600 40px Outfit', '700 40px Outfit', '800 40px Outfit',
-    '400 40px "DM Serif Display"', '700 40px Caveat', '400 40px "Bebas Neue"', '400 40px "Archivo Black"'];
+    '400 40px "DM Serif Display"', '700 40px Caveat', '400 40px "Bebas Neue"', '400 40px "Archivo Black"', '600 40px Fraunces', '800 40px "Playfair Display"', '700 40px "Grenze Gotisch"', '400 40px "Alfa Slab One"'];
   await Promise.all(list.map(f => document.fonts.load(f, sample).catch(() => null)));
 }
 
@@ -1082,6 +1612,7 @@ async function init() {
     const song = await fetchSong(id);
     if (!song.sync) { msg('Tahle písnička ještě nemá časy – video z ní nejde udělat.'); return; }
     await loadFonts();
+    if (song.sync.yt) loadCover(song.sync.yt);
     prepare(song);
     setFormat($('fmt').value, sel.value);
     $('name').textContent = (song.artist ? song.artist + ' – ' : '') + song.title;
