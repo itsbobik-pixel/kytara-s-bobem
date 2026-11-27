@@ -25,6 +25,24 @@ const AL = {
 };
 const r3 = x => Math.round(x * 1000) / 1000;
 
+// předstih akordů: kytarista potřebuje akord vidět kousek před změnou (+ zpoždění sluchátek / reproduktoru)
+const LEAD_KEY = 'ksb.along.lead';
+let alLead = (() => { try { const v = parseFloat(localStorage.getItem(LEAD_KEY)); return Number.isFinite(v) ? v : 0.3; } catch { return 0.3; } })();
+function setLead(v) {
+  alLead = Math.round(Math.max(-0.5, Math.min(1.5, v)) * 10) / 10;
+  try { localStorage.setItem(LEAD_KEY, String(alLead)); } catch { /* nic */ }
+  const el = document.getElementById('alLead');
+  if (el) el.textContent = leadLabel();
+  alTick(true);
+}
+const leadLabel = () => alLead === 0 ? 'Akordy: přesně' : `Akordy: o ${String(Math.abs(alLead)).replace('.', ',')} s ${alLead > 0 ? 'dřív' : 'později'}`;
+function leadControl() {
+  return h('div', { class: 'tgroup', title: 'Kdy se rozsvítí akord: dřív = máš čas ho chytit (a vyrovná zpoždění sluchátek)' },
+    h('button', { onclick: () => setLead(alLead - 0.1), title: 'Akordy později' }, '−'),
+    h('span', { id: 'alLead', class: 'al-lead' }, leadLabel()),
+    h('button', { onclick: () => setLead(alLead + 0.1), title: 'Akordy dřív' }, '+'));
+}
+
 // ---------- data ----------
 function syncFromAlign(out) {
   return {
@@ -399,6 +417,7 @@ function renderAlongBody() {
         oninput: e => alSeek(+e.target.value),
       }),
       capoControl(),
+      leadControl(),
       AL.hasStems && AL.sync?.yt ? h('button', {
         class: 'tbtn', title: 'Přepnout, odkud hraje hudba. YouTube = tak, jak to slyší ostatní.',
         onclick: () => alSwitchSource(AL.engine === 'yt' ? 'wa' : 'yt'),
@@ -574,7 +593,8 @@ function alTick(force) {
   // akordy
   const ch = AL.model.chords;
   let ci = -1;
-  for (let i = 0; i < ch.length; i++) { if (ch[i].t <= t + 0.05) ci = i; else break; }
+  const tc = t + alLead;   // akordy s předstihem
+  for (let i = 0; i < ch.length; i++) { if (ch[i].t <= tc) ci = i; else break; }
   if (ci !== AL.lastChord || force) {
     if (AL.nowChordEl) AL.nowChordEl.classList.remove('now');
     const c = ci >= 0 ? ch[ci] : null;
@@ -593,7 +613,7 @@ function alTick(force) {
   const meter = $('#alMeter');
   if (meter) {
     const a = ci >= 0 ? ch[ci].t : 0, b = ch[ci + 1]?.t;
-    meter.style.width = b ? Math.min(100, Math.max(0, (t - a) / Math.max(0.1, b - a) * 100)) + '%' : '0%';
+    meter.style.width = b ? Math.min(100, Math.max(0, (tc - a) / Math.max(0.1, b - a) * 100)) + '%' : '0%';
   }
   if (AL.edit) tlPlayhead(t);
 }

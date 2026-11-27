@@ -848,3 +848,4 @@ body.al-editing .al-yt { bottom: 236px; }
 .account-card h3 { margin: 0 0 12px; font-size: 18px; }
 .account-card .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .form-ok { margin: 0; font-size: 14px; color: var(--muted); }
+.al-lead { font-size: 13px; font-weight: 600; padding: 0 6px; white-space: nowrap; }
