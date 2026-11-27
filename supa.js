@@ -136,6 +136,7 @@ window.KSB_SUPA = (() => {
     auth.name = user?.user_metadata?.name || (auth.anon ? 'Host' : '');
     // značení akordů: nastavení účtu; bez účtu vždy mezinárodní (B)
     settings.notation = (user && !auth.anon && user.user_metadata?.notation) || (user && !auth.anon ? settings.notation : 'intl');
+    if (user && !auth.anon && typeof mergeFavs === 'function') mergeFavs(user.user_metadata?.favorites);
     if (user) {
       const { data } = await sb.from('admins').select('user_id').eq('user_id', user.id).maybeSingle();
       auth.admin = !!data;
@@ -511,6 +512,11 @@ window.KSB_SUPA = (() => {
     setTimeout(() => { sb.auth.updateUser({ data: { notation: n } }).catch(() => { /* nic, zůstane aspoň v prohlížeči */ }); }, 0);
   }
 
+  /** oblíbené písničky do účtu (ať platí na všech zařízeních) */
+  function saveFavs(list) {
+    setTimeout(() => { sb.auth.updateUser({ data: { favorites: list } }).catch(() => { /* zůstanou aspoň v prohlížeči */ }); }, 0);
+  }
+
   /** host bez e-mailu: anonymní účet, aby mohl přidat song (ten pak čeká na schválení) */
   async function signInAnon() {
     const { data, error } = await sb.auth.signInAnonymously();
@@ -536,5 +542,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, saveFavs, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
 })();

@@ -947,3 +947,13 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .line.al-break.cur .al-dance i:nth-child(2) { animation-delay: .15s; } .line.al-break.cur .al-dance i:nth-child(3) { animation-delay: .3s; } .line.al-break.cur .al-dance i:nth-child(4) { animation-delay: .45s; }
 @keyframes al-dance { 0%, 100% { transform: translateY(0) rotate(-8deg) scale(1); } 30% { transform: translateY(-.45em) rotate(10deg) scale(1.15); } 60% { transform: translateY(.05em) rotate(-4deg) scale(.95); } }
 @media (prefers-reduced-motion: reduce) { .line.al-break.cur .al-dance i { animation: none; } }
+/* oblíbené: hvězdička u písničky + tlačítko Oblíbené vedle Továrny */
+.sl-star { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 0; background: none; cursor: pointer; font-size: 20px; line-height: 1; color: color-mix(in srgb, var(--muted) 70%, transparent); border-radius: 50%; padding: 0; transition: color .15s, transform .15s; }
+.sl-star:hover { color: #F5B400; transform: scale(1.15); }
+.sl-star.on { color: #F5B400; text-shadow: 0 0 10px color-mix(in srgb, #F5B400 45%, transparent); }
+.sl-star.pop { animation: star-pop .45s cubic-bezier(.3,1.6,.5,1); }
+@keyframes star-pop { 0% { transform: scale(.6) rotate(-30deg); } 60% { transform: scale(1.35) rotate(12deg); } 100% { transform: scale(1) rotate(0); } }
+.fav-btn .fav-ico { color: #F5B400; }
+.btn.ghost.fav-on { background: linear-gradient(135deg, #FFD54A, #F5A300); color: #3A2600; border-color: #F5A300; }
+.btn.ghost.fav-on .fav-ico { color: #fff; }
+@media (prefers-reduced-motion: reduce) { .sl-star.pop { animation: none; } }

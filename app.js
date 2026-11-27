@@ -51,6 +51,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
 // ---------- storage ----------
 const LS_SONGS = 'ksb.songs.v1';
 const LS_SETTINGS = 'ksb.settings.v1';
+const LS_FAVS = 'ksb.favs.v1';
 function load(key, fallback) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
 }
@@ -525,11 +526,42 @@ function parseHash() {
   if (fe) return { view: 'song', id: fe[2], mode: 'edit', fac: fe[1] };
   if (location.hash === '#ucet') return { view: 'account' };
   if (location.hash === '#tovarna') return { view: 'factory' };
+  if (location.hash === '#oblibene') return { view: 'list', fav: true };
   const fm = /^#tovarna-([A-Za-z0-9]+)$/.exec(location.hash);
   if (fm) return { view: 'along', id: fm[1], mode: 'play', factory: true };
   return { view: 'list' };
 }
 function go(hash) { location.hash = hash; }
+
+// ---------- oblíbené písničky (v prohlížeči + u přihlášeného v účtu, ať platí všude) ----------
+let favs = null;
+function favSet() {
+  if (!favs) try { favs = new Set(JSON.parse(localStorage.getItem(LS_FAVS) || '[]')); } catch { favs = new Set(); }
+  return favs;
+}
+const isFav = id => favSet().has(id);
+/** po přihlášení: spoj oblíbené z účtu s těmi v prohlížeči */
+function mergeFavs(list) {
+  if (!Array.isArray(list)) return;
+  const before = favSet().size;
+  list.forEach(id => favs.add(id));
+  try { localStorage.setItem(LS_FAVS, JSON.stringify([...favs])); } catch { /* nic */ }
+  if (favs.size !== before && auth.mode === 'supabase' && auth.user && !auth.anon) window.KSB_SUPA.saveFavs?.([...favs]);
+}
+function toggleFav(id) {
+  const f = favSet();
+  if (f.has(id)) f.delete(id); else f.add(id);
+  try { localStorage.setItem(LS_FAVS, JSON.stringify([...f])); } catch { /* nic */ }
+  if (auth.mode === 'supabase' && auth.user && !auth.anon) window.KSB_SUPA.saveFavs?.([...f]);
+  return f.has(id);
+}
+// tlačítko Oblíbené vedle Továrny: zapnuté = v seznamu jen oblíbené
+function favToggle(on) {
+  return h('a', {
+    class: 'btn ghost fav-btn' + (on ? ' fav-on' : ''), href: on ? '#' : '#oblibene',
+    title: on ? 'Zpět na všechny songy' : 'Jen moje oblíbené písničky (★ u písničky)',
+  }, h('span', { class: 'fav-ico' }, '★'), ' Oblíbené');
+}
 window.addEventListener('hashchange', render);
 
 function render() {
@@ -701,7 +733,8 @@ function renderLibrary() {
   app.innerHTML = '';
   document.body.classList.remove('playing');
   const shared = auth.mode === 'supabase';
-  renderTopActions(auth.admin ? [factoryToggle(false)] : []);
+  const favOnly = !!route.fav;
+  renderTopActions([favToggle(favOnly), auth.admin ? factoryToggle(false) : null].filter(Boolean));
 
   const addSong = async () => {
     // přidat může i nepřihlášený: dostane anonymní účet, song čeká na schválení adminem
@@ -762,11 +795,26 @@ function renderLibrary() {
     const list = [...songs]
       .sort((a, b) => cz.compare(a.artist || '', b.artist || '') || cz.compare(a.title || '', b.title || ''))
       .filter(s => !hideUnready || isReady(s))
+      .filter(s => !favOnly || isFav(s.id))
       .filter(s => !q || (s.title + ' ' + (s.artist || '') + ' ' + (s.author || '')).toLowerCase().includes(q));
-    if (!list.length) grid.append(h('li', { class: 'none' }, 'Nic nenalezeno.'));
+    if (!list.length) grid.append(h('li', { class: 'none' }, favOnly && !q ? 'Zatím nemáš žádné oblíbené – klikni na ☆ u písničky.' : 'Nic nenalezeno.'));
     list.forEach((s, i) => {
       const color = CARD_COLORS[i % CARD_COLORS.length];
+      const fav = isFav(s.id);
       grid.append(h('li', { style: `--dot: var(${color})` },
+        h('button', {
+          class: 'sl-star' + (fav ? ' on' : ''), title: fav ? 'Odebrat z oblíbených' : 'Přidat do oblíbených',
+          'aria-label': fav ? 'Odebrat z oblíbených' : 'Přidat do oblíbených', 'aria-pressed': String(fav),
+          onclick: e => {
+            const on = toggleFav(s.id), b = e.currentTarget;
+            b.classList.toggle('on', on);
+            b.textContent = on ? '★' : '☆';
+            b.title = b.ariaLabel = on ? 'Odebrat z oblíbených' : 'Přidat do oblíbených';
+            b.setAttribute('aria-pressed', String(on));
+            if (on) { b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); }
+            if (favOnly && !on) fillGrid();
+          },
+        }, fav ? '★' : '☆'),
         h('a', { class: 'song-link', href: '#play-' + s.id },
           h('span', { class: 'dot' }),
           s.artist ? h('span', { class: 'sl-artist' }, s.artist) : null,
