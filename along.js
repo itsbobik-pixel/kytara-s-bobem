@@ -50,32 +50,27 @@ function sylStarts(word) {
   return starts;
 }
 
-// posun zobrazení dřív/později – zvlášť text a akordy (zpoždění sluchátek / reproduktoru / přepisu;
-// akordy kytarista potřebuje vidět chvilku před změnou). Uloží se v prohlížeči.
-const OFFS = {
-  text:   { key: 'ksb.along.textOff',  def: 0.2, label: 'Text' },
-  chords: { key: 'ksb.along.chordOff', def: 0.4, label: 'Akordy' },
+// posun zobrazení: text přesně, akordy o 0,3 s dřív (kytarista je potřebuje vidět chvilku před změnou).
+// Ostatní nic nenastavují; admin si může předstih akordů doladit (jen ve svém prohlížeči).
+const alOff = { text: 0, chords: 0.3 };
+const adminChordOff = () => {   // admin si předstih může doladit (uloženo v jeho prohlížeči), ostatní mají 0,3 s
+  if (!(typeof auth !== 'undefined' && auth.mode === 'supabase' && auth.admin)) return 0.3;
+  try { const v = parseFloat(localStorage.getItem('ksb.along.chordLead')); return Number.isFinite(v) ? v : 0.3; } catch { return 0.3; }
 };
-const alOff = {};
-for (const [k, o] of Object.entries(OFFS)) {
-  try { const v = parseFloat(localStorage.getItem(o.key)); alOff[k] = Number.isFinite(v) ? v : o.def; } catch { alOff[k] = o.def; }
-}
-const offLabel = k => {
-  const v = alOff[k], L = OFFS[k].label;
-  return v === 0 ? `${L}: přesně` : `${L}: o ${String(Math.abs(v)).replace('.', ',')} s ${v > 0 ? 'dřív' : 'později'}`;
-};
-function setOff(k, v) {
-  alOff[k] = Math.round(Math.max(-1, Math.min(2, v)) * 10) / 10;
-  try { localStorage.setItem(OFFS[k].key, String(alOff[k])); } catch { /* nic */ }
-  const el = document.getElementById('alOff-' + k);
-  if (el) el.textContent = offLabel(k);
+function setChordOff(v) {
+  alOff.chords = Math.round(Math.max(-1, Math.min(2, v)) * 10) / 10;
+  try { localStorage.setItem('ksb.along.chordLead', String(alOff.chords)); } catch { /* nic */ }
+  const el = document.getElementById('alOff-chords');
+  if (el) el.textContent = chordOffLabel();
   alTick(true);
 }
-const offControl = k => h('div', { class: 'tgroup', title: `${OFFS[k].label} ukazuje pozadu → +, předbíhá → −` },
-  h('button', { onclick: () => setOff(k, alOff[k] - 0.1), title: 'později' }, '−'),
-  h('span', { id: 'alOff-' + k, class: 'al-lead' }, offLabel(k)),
-  h('button', { onclick: () => setOff(k, alOff[k] + 0.1), title: 'dřív' }, '+'));
-const leadControl = () => [offControl('text'), offControl('chords')];
+const chordOffLabel = () => { const v = adminChordOff(); return v === 0 ? 'Akordy: přesně' : `Akordy: o ${String(Math.abs(v)).replace('.', ',')} s ${v > 0 ? 'dřív' : 'později'}`; };
+const leadControl = () => auth.mode === 'supabase' && auth.admin
+  ? h('div', { class: 'tgroup', title: 'Jen pro tebe (admin): kdy se rozsvítí akord. Ostatní mají 0,3 s dřív.' },
+      h('button', { onclick: () => setChordOff(adminChordOff() - 0.1), title: 'později' }, '−'),
+      h('span', { id: 'alOff-chords', class: 'al-lead' }, chordOffLabel()),
+      h('button', { onclick: () => setChordOff(adminChordOff() + 0.1), title: 'dřív' }, '+'))
+  : null;
 
 // ---------- data ----------
 function syncFromAlign(out) {
@@ -667,7 +662,8 @@ function alTick(force) {
   // akordy
   const ch = AL.model.chords;
   let ci = -1;
-  const tc = tReal + (AL.edit ? 0 : alOff.chords);   // akordy s vlastním posunem
+  alOff.chords = adminChordOff();
+  const tc = tReal + (AL.edit ? 0 : alOff.chords);   // akordy s předstihem
   for (let i = 0; i < ch.length; i++) { if (ch[i].t <= tc) ci = i; else break; }
   if (ci !== AL.lastChord || force) {
     if (AL.nowChordEl) AL.nowChordEl.classList.remove('now');
