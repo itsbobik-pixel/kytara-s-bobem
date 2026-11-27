@@ -936,3 +936,14 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .chord.msel { outline: 2.5px solid var(--ink); outline-offset: 2px; }
 .sel-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 70; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 16px; border-radius: 999px; background: var(--surface); border: 1.5px solid var(--line); box-shadow: var(--shadow); font-weight: 700; font-size: 14px; max-width: calc(100vw - 32px); }
 .sel-bar .btn { padding: 6px 14px; }
+/* Moving Lyrics: mezihra jako jeden štítek s tančícími notami */
+.al-lyrics .line.al-break { display: flex; justify-content: center; align-items: center; gap: .6em; white-space: normal; cursor: pointer; font-weight: 800; color: var(--muted); padding: .25em 0; }
+.al-break-name { font-size: .8em; letter-spacing: .12em; text-transform: uppercase; padding: .2em .9em; border-radius: 999px; background: color-mix(in srgb, var(--s-inter) 14%, transparent); color: color-mix(in srgb, var(--s-inter) 75%, var(--ink)); transition: background .3s, color .3s, transform .3s; }
+.al-dance { display: inline-flex; gap: .15em; font-size: .95em; }
+.al-dance i { font-style: normal; display: inline-block; opacity: .45; }
+.al-dance i:nth-child(4n+1) { color: var(--d1); } .al-dance i:nth-child(4n+2) { color: var(--d3); } .al-dance i:nth-child(4n+3) { color: var(--d5); } .al-dance i:nth-child(4n+4) { color: var(--d4); }
+.line.al-break.cur .al-break-name { background: var(--s-inter); color: #fff; transform: scale(1.08); }
+.line.al-break.cur .al-dance i { opacity: 1; animation: al-dance .9s ease-in-out infinite; }
+.line.al-break.cur .al-dance i:nth-child(2) { animation-delay: .15s; } .line.al-break.cur .al-dance i:nth-child(3) { animation-delay: .3s; } .line.al-break.cur .al-dance i:nth-child(4) { animation-delay: .45s; }
+@keyframes al-dance { 0%, 100% { transform: translateY(0) rotate(-8deg) scale(1); } 30% { transform: translateY(-.45em) rotate(10deg) scale(1.15); } 60% { transform: translateY(.05em) rotate(-4deg) scale(.95); } }
+@media (prefers-reduced-motion: reduce) { .line.al-break.cur .al-dance i { animation: none; } }

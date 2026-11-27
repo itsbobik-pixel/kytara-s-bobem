@@ -561,7 +561,7 @@ function renderAlongSheet(sheet) {
       // klik na štítek části = přehrát od začátku té části
       const startL = AL.model.lines.slice(L.li).find(x => x.s != null);
       const jump = () => { if (startL) alJump(startL.s); };
-      sheet.append(h('div', { class: 'al-sec' }, h('span', {
+      if (!(AL.lyrics && !line.text && line.chords.length)) sheet.append(h('div', { class: 'al-sec' }, h('span', {
         class: 'sec-label al-sec-btn', 'data-s': sec, title: 'Přehrát od začátku této části',
         role: 'button', tabindex: 0, onclick: jump,
         onkeydown: e => { if (e.key === 'Enter') jump(); },
@@ -570,19 +570,14 @@ function renderAlongSheet(sheet) {
     if (!line.text && !line.chords.length) { sheet.append(h('div', { class: 'gap' })); refs.lines[L.li] = null; return; }
     const el = h('div', { class: 'line al-line' + (line.chords.length ? ' has-chords' : '') + (!line.text ? ' instr' : ''), 'data-li': L.li, 'data-s': sec || null });
     if (AL.lyrics && !line.text) {
-      // Moving Lyrics: místo akordů v intru / mezihře / outru noty (svítí v čase akordu)
-      el.classList.add('al-notes');
-      L.chords.forEach(c => {
-        const ne = h('span', { class: 'al-note', 'data-i': c.pos }, '♪');
-        refs.chords.set(L.li + ':' + c.pos, ne);
-        el.append(h('span', { class: 'c', 'data-i': c.pos }, ne));
-      });
-      el.addEventListener('click', e => {
-        const ce = e.target.closest('.c');
-        const cc = ce && L.chords.find(x => x.pos === +ce.dataset.i && x.t != null);
-        const t = cc ? cc.t : L.s;
-        if (t != null) alJump(t);
-      });
+      // Moving Lyrics: celé intro / mezihra / outro = jeden štítek s tančícími notami (tančí, jen když zrovna hraje)
+      const prev = song.lines[L.li - 1];
+      if (!line.section && prev && !prev.text && prev.chords.length) { refs.lines[L.li] = null; return; }
+      const name = ['intro', 'inter', 'solo', 'outro', 'bridge'].includes(sec) ? secLabel(sec) : secLabel('inter');
+      const notes = () => h('span', { class: 'al-dance', 'aria-hidden': 'true' }, ...['♪', '♫', '♪', '♬'].map(n => h('i', {}, n)));
+      el.classList.add('al-break');
+      el.append(notes(), h('span', { class: 'al-break-name' }, name), notes());
+      el.addEventListener('click', () => { if (L.s != null) alJump(L.s); });
       sheet.append(el);
       refs.lines[L.li] = { el, chars: [], L };
       return;
