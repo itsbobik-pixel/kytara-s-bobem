@@ -9,28 +9,45 @@ const STAGES = { beats: 'bez tempa', chords: 'tempo ✓', done: 'hotovo' };
 const stageOf = s => (!s?.sync ? 'nosync' : s.sync.stage || 'done');
 
 // ---------- seznam ----------
+// v továrně jsou songy, které nejsou hotové: neschválené / soukromé, nebo s nedodělanými časy
+const facWanted = s => !isReady(s) || (!s.partial && (stageOf(s) === 'beats' || stageOf(s) === 'chords'));
 function renderFactoryList() {
   const app = $('#app');
   app.innerHTML = '';
   document.body.classList.remove('playing');
-  renderTopActions([h('a', { class: 'btn ghost', href: '#' }, '← Songy')]);
+  renderTopActions([factoryToggle(true)]);
   const wrap = h('div', { class: 'wrap factory' }, h('h1', {}, '🏭 Továrna'),
-    h('p', { class: 'sub' }, 'Písničky po automatickém zpracování: start, tempo (ťukání dob), časy akordů, nakonec Akordy after.'));
+    h('p', { class: 'sub' }, 'Písničky, které ještě nejsou hotové: start, tempo (ťukání dob), časy akordů, Akordy after a schválení.'));
   if (!auth.admin) { wrap.append(h('p', {}, 'Jen pro admina.')); app.append(wrap); return; }
   const order = { beats: 0, chords: 1, nosync: 2, done: 3 };
-  const list = [...songs].sort((a, b) => (order[stageOf(a)] - order[stageOf(b)]) || (a.title || '').localeCompare(b.title || '', 'cs'));
+  const list = songs.filter(facWanted)
+    .sort((a, b) => (order[stageOf(a)] - order[stageOf(b)]) || (a.title || '').localeCompare(b.title || '', 'cs'));
   const ul = h('ul', { class: 'fac-list' });
+  if (!list.length) ul.append(h('li', {}, h('span', { class: 'fac-name' }, 'Všechno je hotové 🎉')));
   for (const s of list) {
     const st = s.partial ? (s.hasSync ? '…' : 'nosync') : stageOf(s);
+    const fit = window.KSB_SUPA?.jobFit?.(s.id);
     ul.append(h('li', {},
       h('span', { class: 'fac-name' }, (s.artist ? s.artist + ' – ' : '') + (s.title || 'Bez názvu')),
+      fit ? h('span', { class: 'sl-pending', title: 'text = kolik slov se našlo v nahrávce, akordy = kolik akordů opravdu zní' },
+        `text ${fit.text} %` + (fit.chords != null ? ` · akordy ${fit.chords} %` : '')) : null,
+      window.KSB_SUPA?.jobStatus?.(s.id) ? h('span', { class: 'sl-pending' }, '⏳ připravuje se') : null,
+      s.isPublic === false ? h('span', { class: 'fac-stage' }, 'soukromý') : null,
       h('span', { class: 'fac-stage fac-' + st }, st === 'nosync' ? 'bez časů' : STAGES[st] || st),
-      st !== 'nosync' ? h('a', { class: 'btn primary', href: '#tovarna-' + s.id }, st === 'done' ? 'Upravit' : 'Zpracovat') : null));
+      s.approved === false ? h('button', {
+        class: 'sl-approve', title: 'Schválit – uvidí ho všichni',
+        onclick: async () => {
+          try { await window.KSB_SUPA.approve(s.id); s.approved = true; renderFactoryList(); toast(`„${s.title}“ je schválený ✓`); }
+          catch { toast('Schválení se nepovedlo, zkus to znovu.'); }
+        },
+      }, '✓ Schválit') : null,
+      st !== 'nosync' ? h('a', { class: 'btn primary', href: '#tovarna-' + s.id }, st === 'done' ? 'Upravit' : 'Zpracovat')
+        : h('a', { class: 'btn', href: '#play-' + s.id }, 'Otevřít')));
   }
   wrap.append(ul);
   app.append(wrap);
   // seznam má jen názvy – stav (sync.stage) se dočte u nenačtených
-  const missing = list.filter(s => s.partial && s.hasSync);
+  const missing = songs.filter(s => s.partial && s.hasSync);
   if (missing.length && window.KSB_SUPA) Promise.all(missing.slice(0, 30).map(s => window.KSB_SUPA.ensureLoaded(s.id).catch(() => null)))
     .then(() => { if (route.view === 'factory') renderFactoryList(); });
 }

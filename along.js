@@ -487,8 +487,9 @@ function renderAlongBody() {
         class: 'tbtn' + (AL.sync.yt ? ' on' : ''), title: AL.sync.yt ? 'YouTube video k songu – klik pro změnu' : 'Přidat YouTube video, ať play-along funguje všem',
         onclick: e => openYtPopover(e.currentTarget),
       }, '▶ YouTube') : null,
-      editable && AL.sync && auth.admin && !AL.factory ? h('a', {
-        class: 'tbtn', href: '#tovarna-' + song.id, title: 'Továrna: časy, tempo a akordy na časové ose',
+      editable && AL.sync && auth.admin ? h('a', {
+        class: 'tbtn' + (AL.factory ? ' on' : ''), href: (AL.factory ? '#along-' : '#tovarna-') + song.id,
+        title: AL.factory ? 'Schovat továrnu (zpět na play-along)' : 'Továrna: časy, tempo a akordy na časové ose',
       }, '🏭 Továrna') : null,
       editable && AL.sync ? h('a', {
         class: 'tbtn', href: (location.port === '5174' ? '' : 'http://127.0.0.1:5174/') + 'video.html#' + song.id, target: '_blank',
@@ -833,6 +834,13 @@ function renderTimeline() {
     el.classList.add(degClass(c.ch.root, song.key));
     if (AL.sel && AL.sel.li === c.li && AL.sel.pos === c.pos) el.classList.add('sel');
     if (AL.factory && typeof facIsNext === 'function' && facIsNext(c)) el.classList.add('fac-next');
+    // úchyty: levý = začátek akordu, pravý = konec (= začátek dalšího akordu)
+    const nx = allCh[i + 1]?.t != null ? allCh[i + 1] : null;
+    for (const side of nx ? ['l', 'r'] : ['l']) {
+      const gr = h('div', { class: 'tl-grip tl-grip-' + side, title: side === 'r' ? 'Táhni = konec akordu (začátek dalšího)' : 'Táhni = začátek akordu' });
+      gr.addEventListener('pointerdown', e => tlChordResize(e, el, L, c, side, allCh[i - 1], nx));
+      el.append(gr);
+    }
     items.append(el);
   }
   // klik do prázdna / na pravítko = skok (na pravítku jde i táhnout), kolečko = posun
@@ -926,6 +934,49 @@ function tlResize(e, el, L, w, side) {
     if (side === 'r') { sw[3] = r3(e0 + d); sw[2] = r3(s0); }
     else { sw[2] = r3(Math.max(0, s0 + d)); sw[3] = r3(e0); }
     sw[4] = 1;   // ručně nastavená délka (přebarvení přesně podle ní)
+    commitSync();
+    renderAlongBody();
+  };
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+}
+
+/** natažení / zkrácení akordu za okraj: levý posune jeho začátek, pravý začátek dalšího akordu (konec se nemění / začátek ano) */
+function tlChordResize(e, el, L, c, side, prev, next) {
+  e.preventDefault();
+  e.stopPropagation();
+  const x0 = e.clientX, pps = tlWidth() / AL.span;
+  const left0 = parseFloat(el.style.left), width0 = parseFloat(el.style.width);
+  const mv = side === 'l' ? c : next;   // akord, jehož čas se mění
+  const t0 = mv.t;
+  const lo = (side === 'l' ? prev?.t ?? 0 : c.t) + 0.05;
+  const hi = (side === 'l' ? next?.t ?? t0 + 30 : next === null ? t0 + 30 : (AL.model.chords[AL.model.chords.indexOf(next) + 1]?.t ?? t0 + 30)) - 0.05;
+  let d = 0;
+  try { el.setPointerCapture(e.pointerId); } catch { /* nic */ }
+  el.classList.add('dragging');
+  const calc = ev => {
+    let t = t0 + (ev.clientX - x0) / pps;
+    if (ev.shiftKey !== tlSnapOn() && AL.sync?.beats?.length) t = nearestBeat(t);
+    return Math.min(hi, Math.max(lo, t)) - t0;
+  };
+  const move = ev => {
+    d = calc(ev);
+    if (side === 'r') el.style.width = Math.max(10, width0 + d * pps) + 'px';
+    else { el.style.left = (left0 + d * pps) + 'px'; el.style.width = Math.max(10, width0 - d * pps) + 'px'; }
+    el.dataset.d = (side === 'r' ? 'konec ' : 'začátek ') + (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(2) + ' s';
+  };
+  const up = ev => {
+    el.removeEventListener('pointermove', move);
+    el.removeEventListener('pointerup', up);
+    el.removeEventListener('pointercancel', up);
+    el.classList.remove('dragging');
+    d = calc(ev);
+    if (Math.abs(d) < 0.01) return;
+    const ML = AL.model.lines.find(x => x.li === mv.li) || L;
+    pushSyncUndo();
+    shiftSync('chord', ML, mv, d);
+    relocateChord(ML, mv, t0 + d);
     commitSync();
     renderAlongBody();
   };

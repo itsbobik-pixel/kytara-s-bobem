@@ -858,6 +858,7 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .tl-grip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 3; }
 .tl-grip-l { left: 0; } .tl-grip-r { right: 0; }
 .tl-word:hover .tl-grip { background: color-mix(in srgb, var(--d3) 45%, transparent); }
+.tl-chord:hover .tl-grip { background: color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 4px; }
 /* továrna */
 .factory { max-width: 860px; }
 .fac-list { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 8px; }
@@ -913,3 +914,5 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 
 /* továrna: Akordy after – nápověda v liště editoru */
 .fac-after-hint { font-size: 13px; color: var(--muted); align-self: center; max-width: 340px; line-height: 1.3; }
+/* tlačítko Továrna zapnuté (přepínač) */
+.btn.ghost.fac-on { background: var(--ink); color: var(--bg); border-color: var(--ink); }

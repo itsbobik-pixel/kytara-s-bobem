@@ -685,12 +685,22 @@ function renderAccount() {
 const CARD_COLORS = ['--d0', '--d3', '--d4', '--d5', '--d6', '--d1', '--d2'];
 let searchQ = '';
 
+// hotový song = veřejný a schválený; ostatní jsou pro admina jen v továrně
+const isReady = s => s.isPublic !== false && s.approved !== false;
+// tlačítko Továrna jako přepínač: zapnuté = zvýrazněné, další klik ji schová
+function factoryToggle(on) {
+  return h('a', {
+    class: 'btn ghost' + (on ? ' fac-on' : ''), href: on ? '#' : '#tovarna',
+    title: on ? 'Schovat továrnu (zpět na hotové songy)' : 'Písničky ke zpracování (tempo, akordy, schválení)',
+  }, '🏭 Továrna');
+}
+
 function renderLibrary() {
   const app = $('#app');
   app.innerHTML = '';
   document.body.classList.remove('playing');
   const shared = auth.mode === 'supabase';
-  renderTopActions(auth.admin ? [h('a', { class: 'btn ghost', href: '#tovarna', title: 'Písničky ke zpracování (tempo, akordy, vzhled)' }, '🏭 Továrna')] : []);
+  renderTopActions(auth.admin ? [factoryToggle(false)] : []);
 
   const addSong = async () => {
     // přidat může i nepřihlášený: dostane anonymní účet, song čeká na schválení adminem
@@ -743,11 +753,14 @@ function renderLibrary() {
   wrap.append(h('div', { class: 'lib-tools' }, search), grid);
 
   const cz = new Intl.Collator('cs', { sensitivity: 'base' });
+  // admin má nehotové (neschválené / soukromé) songy jen v továrně
+  const hideUnready = auth.admin && shared;
   function fillGrid() {
     grid.innerHTML = '';
     const q = searchQ.trim().toLowerCase();
     const list = [...songs]
       .sort((a, b) => cz.compare(a.artist || '', b.artist || '') || cz.compare(a.title || '', b.title || ''))
+      .filter(s => !hideUnready || isReady(s))
       .filter(s => !q || (s.title + ' ' + (s.artist || '') + ' ' + (s.author || '')).toLowerCase().includes(q));
     if (!list.length) grid.append(h('li', { class: 'none' }, 'Nic nenalezeno.'));
     list.forEach((s, i) => {
