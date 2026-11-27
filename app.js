@@ -2130,7 +2130,8 @@ document.addEventListener('keydown', e => {
       const dir = e.key === 'ArrowLeft' ? -1 : 1;
       if (!(AL.edit && tlNudge(dir, e.shiftKey))) alSeek(alNow() + dir * 5);
     }
-    else if (e.key === 'Escape' && AL.edit && AL.sel) { AL.sel = null; renderTimeline(); }
+    else if (e.key === 'Escape' && AL.edit && AL.sel) { AL.sel = null; renderAlongBody(); }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && AL.edit && AL.sel) { e.preventDefault(); tlDeleteChord(); }
     return;
   }
   if ((e.ctrlKey || e.metaKey) && !typing && route.view === 'song' && (k === 'z' || k === 'y')) {

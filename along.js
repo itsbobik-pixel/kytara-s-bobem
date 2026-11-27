@@ -703,6 +703,7 @@ function renderTimelineShell() {
   return h('div', { class: 'al-tl', id: 'alTl' },
     h('div', { class: 'tl-tools' },
       h('div', { class: 'tgroup' },
+        h('button', { title: 'Smazat vybraný akord (Delete)', disabled: !AL.sel, onclick: () => tlDeleteChord() }, '🗑 Akord'),
         h('button', { title: 'Zpět (Ctrl+Z)', disabled: !AL.undo.length, onclick: () => alUndo() }, '↶ Zpět'),
         h('button', { title: 'Vrátit (Ctrl+Y)', disabled: !AL.redo?.length, onclick: () => alRedo() }, 'Vrátit ↷')),
       h('div', { class: 'tgroup tl-transport' },
@@ -920,7 +921,7 @@ function tlDrag(e, el, kind, L, obj) {
     el.removeEventListener('pointercancel', up);
     el.classList.remove('dragging');
     if (!moved) {   // klik = vyber (akord) a přehraj od tohoto místa
-      if (kind === 'chord') { AL.sel = { li: obj.li ?? L.li, pos: obj.pos }; renderTimeline(); }
+      if (kind === 'chord') { AL.sel = { li: obj.li ?? L.li, pos: obj.pos }; renderAlongBody(); }
       alSeek(t0 - 0.3);
       if (!AL.playing) alPlay();
       return;
@@ -946,6 +947,22 @@ function nearestBeat(t) {
   let lo = 0, hi = b.length - 1;
   while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (b[mid] < t) lo = mid; else hi = mid; }
   return Math.abs(b[lo] - t) <= Math.abs(b[hi] - t) ? b[lo] : b[hi];
+}
+/** smazat vybraný akord (z textu i z časů); Zpět ho vrátí */
+function tlDeleteChord() {
+  if (!AL.sel) return false;
+  const song = current();
+  const line = song?.lines[AL.sel.li];
+  const ch = line?.chords.find(x => x.pos === AL.sel.pos);
+  if (!ch) return false;
+  pushSyncUndo();
+  line.chords = line.chords.filter(x => x !== ch);
+  const sl = AL.sync.lines[AL.sel.li];
+  if (sl) sl.c = sl.c.filter(x => x[0] !== AL.sel.pos);
+  AL.sel = null;
+  commitSync();
+  renderAlongBody();
+  return true;
 }
 /** vybraný akord o dobu vlevo/vpravo (fine = o 0,05 s) */
 function tlNudge(dir, fine) {
