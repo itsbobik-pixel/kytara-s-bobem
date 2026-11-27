@@ -44,7 +44,7 @@ def handler(job):
         vocals, inst = separate(audio, os.path.join(work, 'sep'))
         say('demucs hotovo')
         lines = inp['song']['lines']
-        sync, stats, _ = compute_sync(lines, vocals, inst, lang=inp.get('lang', 'cs'), log=say)
+        sync, stats, _ = compute_sync(lines, vocals, inst, lang=inp.get('lang', 'cs'), log=say, mix_path=audio)
         up = inp.get('stems_upload') or {}
         if up.get('vocals'):
             _put(up['vocals'], vocals)

@@ -488,7 +488,36 @@ def chord_fit(items, C, dur, shift=0):
 
 
 # ---------------------------------------------------------------- celé
-def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print):
+
+def beats_beat_this(mix_path, log=print):
+    """Doby neuronkou Beat This (CPJKU) z celé nahrávky. Vrací doby v úrovni „tactus“ nebo None."""
+    try:
+        import torch
+        from beat_this.inference import Audio2Beats
+    except Exception as ex:  # noqa: BLE001
+        log('beat_this nejde načíst: %s' % ex)
+        return None
+    dev = 'cuda' if torch.cuda.is_available() else 'cpu'
+    a2b = Audio2Beats(checkpoint_path='final0', device=dev, float16=False, dbn=False)
+    beats, downs = a2b(load(mix_path, SR), SR)
+    beats, downs = np.asarray(beats, float), np.asarray(downs, float)
+    if len(beats) < 16:
+        return None
+    # Beat This často dává osminy (dvojnásobné tempo) → dokud je doba < 0,45 s, bereme každou druhou;
+    # fázi vybereme tu, na kterou padá víc začátků taktů
+    while float(np.median(np.diff(beats))) < 0.45 and len(beats) >= 32:
+        best = None
+        for ph in (0, 1):
+            b = beats[ph::2]
+            hit = sum(1 for d in downs if len(b) and np.min(np.abs(b - d)) < 0.07)
+            if best is None or hit > best[0]:
+                best = (hit, b)
+        beats = best[1]
+    log('Beat This: %d dob, %.1f BPM (%s)' % (len(beats), 60 / float(np.median(np.diff(beats))), dev))
+    return beats
+
+
+def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print, mix_path=None):
     """words=None → přepis WhisperX (GPU). Jinak words = sync.lines[].w (test bez GPU)."""
     stats = {}
     if words is None:
@@ -521,9 +550,15 @@ def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print
     # tempo se často splete o polovinu/dvojnásobek → zkusíme i to a necháme variantu, kde akordy nejlíp sedí
     periods = [period] + ([period / 2] if period > 0.75 else []) + ([period * 2] if period < 0.36 else [])
     C = chroma(inst) if any(l.get('chords') for l in lines) else None
+    bt = None
+    if mix_path:
+        try:
+            bt = beats_beat_this(mix_path, log)
+        except Exception as ex:  # noqa: BLE001
+            log('Beat This selhal: %s' % ex)
+    cand = [bt] if bt is not None else [smooth_beats(track_beats(env, per)) for per in periods]
     best = None
-    for per in periods:
-        bts = smooth_beats(track_beats(env, per))
+    for bts in cand:
         its = chord_items(lines, words, step=2 * float(np.median(np.diff(bts))))   # bez textu: ~2 doby na akord
         if not its or C is None:
             best = best or (bts, its, None, 0, None, -1e9)
