@@ -152,11 +152,68 @@ def fill_times(ours, theirs):
         o['end'] = o['start'] + 0.3
 
 
+def voiced_segments(vocals, sr=SR, gap=0.12, min_len=0.15):
+    """úseky, kde ve stopě zpěvu zní hlas: [(začátek, konec)] v sekundách"""
+    hop = int(sr * 0.01)
+    n = len(vocals) // hop
+    if n < 10:
+        return []
+    env = np.sqrt((vocals[:n * hop].reshape(n, hop) ** 2).mean(1))
+    sm = np.convolve(env, np.ones(5) / 5, mode='same')
+    on = sm > np.percentile(sm, 55) * 0.5
+    g, segs, i = int(gap * 100), [], 0
+    while i < n:
+        if on[i]:
+            j = i
+            while j < n and (on[j] or on[j:j + g].any()):
+                j += 1
+            if j - i >= min_len * 100:
+                segs.append((i / 100, j / 100))
+            i = j
+        else:
+            i += 1
+    return segs
+
+
+def refine_unmatched(ours, vocals, sr=SR):
+    """slova, která přepis nenašel (vokalízy „balabambam“, nesrozumitelná místa), dostanou časy podle stopy zpěvu:
+    začátek se přichytí k nejbližšímu začátku úseku zpěvu (do 0,6 s), konec = konec toho úseku
+    (nejvýš do začátku dalšího slova). Vrací počet upravených slov."""
+    if vocals is None or not len(ours):
+        return 0
+    segs = voiced_segments(vocals, sr)
+    if not segs:
+        return 0
+    starts = np.array([a for a, _ in segs])
+    fixed = 0
+    for i, o in enumerate(ours):
+        if o.get('ok') or o.get('start') is None:
+            continue
+        k = int(np.argmin(np.abs(starts - o['start'])))
+        a, b = segs[k]
+        if abs(a - o['start']) > 0.6:
+            # žádný začátek poblíž: aspoň konec podle úseku zpěvu, ve kterém slovo leží
+            inside = [(x, y) for x, y in segs if x <= o['start'] <= y]
+            if not inside:
+                continue
+            a, b = o['start'], inside[0][1]
+        nxt = ours[i + 1]['start'] if i + 1 < len(ours) and ours[i + 1].get('start') is not None else None
+        if nxt is not None and nxt > a:
+            b = min(b, nxt - 0.02)
+        o['start'], o['end'] = round(a, 3), round(max(a + 0.1, b), 3)
+        o['m'] = True   # délka podle zpěvu → přebarvovat po celé délce
+        fixed += 1
+    return fixed
+
+
 def words_to_sync(lines, ours):
-    """sync.lines[].w = [[pos, len, start, end], ...] (jako v appce)."""
+    """sync.lines[].w = [[pos, len, start, end(, 1 = délka podle zpěvu)], ...] (jako v appce)."""
     out = [[] for _ in lines]
     for o in ours:
-        out[o['line']].append([o['pos'], o['len'], round(o['start'], 3), round(o['end'], 3)])
+        w = [o['pos'], o['len'], round(o['start'], 3), round(o['end'], 3)]
+        if o.get('m'):
+            w.append(1)
+        out[o['line']].append(w)
     return out
 
 
@@ -440,6 +497,12 @@ def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print
         ours = our_words(lines)
         match(ours, theirs)
         fill_times(ours, theirs)
+        try:
+            nfix = refine_unmatched(ours, load(vocals_path))
+            if nfix:
+                log('nenalezená slova rozložena podle zpěvu: %d' % nfix)
+        except Exception as ex:  # noqa: BLE001
+            log('refine_unmatched: %s' % ex)
         words = words_to_sync(lines, ours)
         stats.update(ours=len(ours), transcribed=len(theirs), matched=sum(o['ok'] for o in ours))
         # řádky, kde se nenašlo skoro nic (text nesedí s nahrávkou)
