@@ -626,7 +626,7 @@ function alTick(force) {
       let on;
       if (mode === 'word') on = t >= w.s;
       else if (mode === 'syllable') {
-        if (!w.syl) w.syl = sylStarts(r.chars.filter(x => x.w === w).map(x => x.el.textContent).join(''));
+        if (!w.syl) w.syl = sylStarts((song.lines[cur]?.text || '').slice(w.pos, w.pos + w.len));
         const si = w.syl.filter(st => st <= k).length - 1;
         on = t >= w.s + (w.e - w.s) * (Math.max(0, si) / w.syl.length);
       } else on = t >= w.s + (w.e - w.s) * (k / Math.max(1, w.len));
