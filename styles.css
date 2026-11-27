@@ -830,6 +830,7 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .sl-link:hover { background: var(--surface-2); text-decoration: underline; }
 .sl-link-along { color: color-mix(in srgb, var(--d5) 85%, var(--ink)); }
 .sl-link-chords { color: color-mix(in srgb, var(--d3) 85%, var(--ink)); }
+.sl-link-lyrics { color: color-mix(in srgb, var(--d1) 78%, var(--ink)); }
 
 /* přihlášení přes Google */
 .google-btn { width: 100%; justify-content: center; gap: 10px; margin: 6px 0 2px; }
@@ -924,3 +925,9 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .fac-ico { font-size: 16px; line-height: 1; }
 .fac-tap small { font-size: 12px; font-weight: 800; opacity: .85; min-width: 1ch; }
 .fac-tap[data-tip]:hover::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); width: 260px; padding: 8px 10px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 12.5px; font-weight: 600; line-height: 1.35; white-space: normal; text-align: left; z-index: 50; pointer-events: none; box-shadow: var(--shadow); }
+
+/* Moving Lyrics: jen text, místo akordů v mezihrách noty */
+.al-lyrics .line.al-notes { display: flex; flex-wrap: wrap; gap: .35em; align-items: center; white-space: normal; line-height: 1.6; cursor: pointer; }
+.al-note { display: inline-grid; place-items: center; width: 1.7em; height: 1.7em; border-radius: 50%; font-size: .9em; font-weight: 800; color: color-mix(in srgb, var(--d1) 80%, var(--ink)); background: color-mix(in srgb, var(--d1) 16%, transparent); transition: transform .15s, background .15s, color .15s; }
+.al-note.now { background: var(--d1); color: var(--d1-ink); transform: scale(1.25); box-shadow: 0 0 0 4px color-mix(in srgb, var(--d1) 30%, transparent); }
+.al-lyrics .al-now:not(:has(> :not([hidden]))) { display: none; }

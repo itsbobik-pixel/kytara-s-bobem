@@ -516,8 +516,9 @@ function updateHistoryButtons() {
 //  ROUTER
 // =========================================================
 function parseHash() {
-  const m = /^#(song|play|along)-([A-Za-z0-9]+)$/.exec(location.hash);
+  const m = /^#(song|play|along|lyrics)-([A-Za-z0-9]+)$/.exec(location.hash);
   if (m && m[1] === 'along') return { view: 'along', id: m[2], mode: 'play' };
+  if (m && m[1] === 'lyrics') return { view: 'along', id: m[2], mode: 'play', lyrics: true };   // Moving Lyrics: jen text s videem
   if (m) return { view: 'song', id: m[2], mode: m[1] === 'play' ? 'play' : 'edit' };
   // z továrny: Akordy pre (normální editor) / Akordy after (jen posun akordů, časy zůstanou)
   const fe = /^#(pre|after)-([A-Za-z0-9]+)$/.exec(location.hash);
@@ -557,7 +558,7 @@ function render() {
     return;
   }
   document.documentElement.style.setProperty('--fs', settings.fontSize + 'px');
-  if (typeof AL !== 'undefined') AL.factory = !!route.factory && auth.admin;
+  if (typeof AL !== 'undefined') { AL.factory = !!route.factory && auth.admin; AL.lyrics = !!route.lyrics; }
   if (route.view === 'along') renderAlong();
   else if (route.view === 'factory') renderFactoryList();
   else if (route.view === 'song') renderEditor();
@@ -788,6 +789,7 @@ function renderLibrary() {
             },
           }, '✓ Schválit') : null,
           s.hasSync !== false ? h('a', { class: 'sl-link sl-link-along', href: '#along-' + s.id, title: 'Hudba, text a akordy v rytmu' }, 'Play Along') : null,
+          s.hasSync !== false ? h('a', { class: 'sl-link sl-link-lyrics', href: '#lyrics-' + s.id, title: 'Jen text, který jede s videem – bez akordů' }, 'Moving Lyrics') : null,
           h('a', { class: 'sl-link sl-link-chords', href: '#play-' + s.id, title: 'Jen text s akordy' }, 'Akordy'))));
     });
   }

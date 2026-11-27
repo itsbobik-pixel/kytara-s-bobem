@@ -374,7 +374,7 @@ async function alLoad(song) {
   AL.loading = false;
   if (AL.id !== song.id) return;
   if (AL.sync) rebuild();
-  if (!AL.hasStems && AL.sync?.yt) ytStart(AL.sync.yt);
+  if ((!AL.hasStems || AL.lyrics) && AL.sync?.yt) ytStart(AL.sync.yt);
   renderAlongBody();
 }
 
@@ -440,6 +440,8 @@ function renderAlong() {
   if (song.sync && JSON.stringify(song.sync) !== JSON.stringify(AL.sync)) { AL.sync = clone(song.sync); AL.undo = []; AL.redo = []; }
   if (AL.sync) rebuild();   // vždy znovu: song se mohl změnit v editoru, nebo se změnilo kapo / transpozice
   if (AL.engine === 'yt') { const box = $('#alYtBox'); if (box) box.hidden = false; }
+  // Moving Lyrics jede vždycky s YouTube videem
+  if (AL.lyrics && AL.sync?.yt && AL.engine !== 'yt' && !AL.loading) { alSwitchSource('yt'); return; }
   renderAlongBody();
 }
 
@@ -447,7 +449,7 @@ function renderAlongBody() {
   const song = alSong();
   const app = $('#app');
   if (!song || !app) return;
-  const editable = canEdit(song);
+  const editable = canEdit(song) && !AL.lyrics;   // Moving Lyrics = jen pro čtení, bez nástrojů
   if (!editable) AL.edit = false;
   AL.edit = !!(AL.factory && editable && AL.sync);   // časy se upravují jen v továrně
   const ready = alReady();
@@ -469,12 +471,12 @@ function renderAlongBody() {
         disabled: !ready, 'aria-label': 'Posun v písničce',
         oninput: e => alSeek(+e.target.value),
       }),
-      capoControl(),
-      AL.hasStems && AL.sync?.yt ? h('button', {
+      AL.lyrics ? null : capoControl(),
+      AL.hasStems && AL.sync?.yt && !AL.lyrics ? h('button', {
         class: 'tbtn', title: 'Přepnout, odkud hraje hudba. YouTube = tak, jak to slyší ostatní.',
         onclick: () => alSwitchSource(AL.engine === 'yt' ? 'wa' : 'yt'),
       }, AL.engine === 'yt' ? 'Zdroj: YouTube' : 'Zdroj: moje stopy') : null,
-      AL.hasStems && AL.engine === 'wa' ? h('label', { class: 'al-voc', title: 'Hlasitost zpěvu – úplně vlevo = karaoke bez vokálu' },
+      AL.hasStems && AL.engine === 'wa' && !AL.lyrics ? h('label', { class: 'al-voc', title: 'Hlasitost zpěvu – úplně vlevo = karaoke bez vokálu' },
         h('span', {}, (settings.vocal ?? 1) < 0.05 ? '🎸' : '🎤'),
         h('input', {
           type: 'range', min: 0, max: 1, step: 0.05, value: settings.vocal ?? 1, 'aria-label': 'Hlasitost vokálu',
@@ -494,7 +496,8 @@ function renderAlongBody() {
       }, '🎬 Video') : null,
       null));
 
-  const ed = h('div', { class: 'editor play along' + (AL.edit ? ' al-editing' : '') }, bar);
+  if (AL.lyrics) bar.querySelector('.pb-back').href = '#';
+  const ed = h('div', { class: 'editor play along' + (AL.edit ? ' al-editing' : '') + (AL.lyrics ? ' al-lyrics' : '') }, bar);
 
   if (AL.loading) {
     ed.append(h('div', { class: 'empty' }, h('div', { class: 'al-loader', 'aria-hidden': 'true' }, ...[0, 1, 2, 3, 4, 5, 6].map(i => h('i', { style: `--i:${i};background:var(--d${i})` }))), h('h2', {}, 'Načítám zvuk…')));
@@ -511,8 +514,8 @@ function renderAlongBody() {
   }
 
   ed.append(h('div', { class: 'al-now' },
-    h('div', { class: 'al-cur-wrap' }, h('small', {}, 'Hraje'), h('span', { id: 'alCur', class: 'chord al-cur' }, '–')),
-    h('div', { class: 'al-next-wrap' },
+    AL.lyrics ? null : h('div', { class: 'al-cur-wrap' }, h('small', {}, 'Hraje'), h('span', { id: 'alCur', class: 'chord al-cur' }, '–')),
+    AL.lyrics ? null : h('div', { class: 'al-next-wrap' },
       h('small', {}, 'Další'), h('span', { id: 'alNext', class: 'chord al-next' }, '–'),
       h('div', { class: 'al-meter' }, h('i', { id: 'alMeter' }))),
     h('div', { id: 'alAd', class: 'al-src al-ad', hidden: true }, '📺 Reklama nebo načítání na YouTube – text počká'),
@@ -566,9 +569,27 @@ function renderAlongSheet(sheet) {
     }
     if (!line.text && !line.chords.length) { sheet.append(h('div', { class: 'gap' })); refs.lines[L.li] = null; return; }
     const el = h('div', { class: 'line al-line' + (line.chords.length ? ' has-chords' : '') + (!line.text ? ' instr' : ''), 'data-li': L.li, 'data-s': sec || null });
-    const minPos = line.chords.reduce((m, c) => Math.min(m, c.pos), 0);
+    if (AL.lyrics && !line.text) {
+      // Moving Lyrics: místo akordů v intru / mezihře / outru noty (svítí v čase akordu)
+      el.classList.add('al-notes');
+      L.chords.forEach(c => {
+        const ne = h('span', { class: 'al-note', 'data-i': c.pos }, '♪');
+        refs.chords.set(L.li + ':' + c.pos, ne);
+        el.append(h('span', { class: 'c', 'data-i': c.pos }, ne));
+      });
+      el.addEventListener('click', e => {
+        const ce = e.target.closest('.c');
+        const cc = ce && L.chords.find(x => x.pos === +ce.dataset.i && x.t != null);
+        const t = cc ? cc.t : L.s;
+        if (t != null) alJump(t);
+      });
+      sheet.append(el);
+      refs.lines[L.li] = { el, chars: [], L };
+      return;
+    }
+    const minPos = AL.lyrics ? 0 : line.chords.reduce((m, c) => Math.min(m, c.pos), 0);
     if (minPos < 0) el.style.setProperty('--pre', String(-minPos));
-    const len = Math.max(line.text.length, line.chords.reduce((m, c) => Math.max(m, c.pos + 1), 0), 1);
+    const len = AL.lyrics ? Math.max(line.text.length, 1) : Math.max(line.text.length, line.chords.reduce((m, c) => Math.max(m, c.pos + 1), 0), 1);
     const chars = [];
     const wordOf = new Map();
     L.words.forEach(w => { for (let i = w.pos; i < w.pos + w.len; i++) wordOf.set(i, w); });
@@ -577,7 +598,7 @@ function renderAlongSheet(sheet) {
       const span = h('span', { class: 'c' + (ch == null ? ' pad' : '') + (i < 0 ? ' pre' : ''), 'data-i': i }, ch == null ? ' ' : ch);
       const w = wordOf.get(i);
       if (w) { span.dataset.w = w.k; chars.push({ el: span, w, i }); }
-      const c = L.chords.find(x => x.pos === i);
+      const c = !AL.lyrics && L.chords.find(x => x.pos === i);
       if (c) {
         const ce = h('span', { class: 'chord ' + degClass(c.ch.root, song.key) }, chordName(c.ch, song.key));
         span.append(ce);
