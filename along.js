@@ -719,6 +719,17 @@ function renderTimelineShell() {
         title: 'Ťukání: pusť písničku a při každé změně akordu zmáčkni J – nejbližší akord skočí na ten okamžik (na dobu)',
         onclick: () => { AL.tap = !AL.tap; AL.tapped = new Set(); renderAlongBody(); },
       }, AL.tap ? '⌨ Ťukání: J' : '⌨ Ťukat akordy'),
+      // ťukání prvních dob taktu → z nich se složí mřížka
+      AL.barTaps
+        ? h('div', { class: 'tgroup tl-bartap' },
+            h('span', { class: 'al-lead', id: 'tlBarCount' }, `🥁 K = 1. doba (${AL.barTaps.length})`),
+            h('button', { title: 'Metrum', onclick: () => { AL.barMeter = AL.barMeter === 3 ? 4 : 3; renderAlongBody(); } }, (AL.barMeter || 4) + '/4'),
+            h('button', { title: 'Složit mřížku z ťuků', disabled: AL.barTaps.length < 2, onclick: () => applyBarTaps() }, '✓ Použít'),
+            h('button', { title: 'Zrušit ťukání', onclick: () => { AL.barTaps = null; renderAlongBody(); } }, '✕'))
+        : h('button', {
+            class: 'tbtn', title: 'Pusť písničku a na každou 1. dobu taktu zmáčkni K – mřížka dob se podle toho složí',
+            onclick: () => { AL.barTaps = []; AL.barMeter = AL.sync?.meter || 4; renderAlongBody(); },
+          }, '🥁 Ťukat 1. doby'),
       h('button', { class: 'tbtn', title: 'Oddálit', onclick: () => tlZoom(1.5) }, '−'),
       h('button', { class: 'tbtn', title: 'Přiblížit', onclick: () => tlZoom(1 / 1.5) }, '+')),
     // přehled celé písničky: kde je zobrazený úsek, klik/tažení = skok
@@ -989,6 +1000,61 @@ function nearestBeat(t) {
   while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (b[mid] < t) lo = mid; else hi = mid; }
   return Math.abs(b[lo] - t) <= Math.abs(b[hi] - t) ? b[lo] : b[hi];
 }
+/** ťuknutí na 1. dobu taktu (klávesa K) */
+function tlBarTap() {
+  if (!AL.barTaps) return;
+  const t = alNow();
+  if (AL.barTaps.length && t - AL.barTaps[AL.barTaps.length - 1] < 0.4) return;   // dvojklep
+  AL.barTaps.push(r3(t));
+  const el = document.getElementById('tlBarCount');
+  if (el) el.textContent = `🥁 K = 1. doba (${AL.barTaps.length})`;
+  const ok = document.querySelector('.tl-bartap button[title="Složit mřížku z ťuků"]');
+  if (ok) ok.disabled = AL.barTaps.length < 2;
+}
+/** z ťuků na 1. doby složí mřížku: mezi ťuky rovnoměrně, před/za nimi navázat na nalezené doby */
+function applyBarTaps() {
+  const taps = [...(AL.barTaps || [])].sort((a, b) => a - b);
+  if (taps.length < 2) return;
+  const m = AL.barMeter || 4;
+  const dur = AL.dur || AL.sync.dur || taps[taps.length - 1] + 10;
+  const diffs = taps.slice(1).map((x, i) => x - taps[i]);
+  const barP = [...diffs].sort((a, b) => a - b)[Math.floor(diffs.length / 2)];   // medián délky taktu
+  const out = [];
+  // mezi ťuky: počet taktů podle mediánu (vynechané takty se dopočítají), takt rovnoměrně na m dob
+  for (let i = 0; i < taps.length - 1; i++) {
+    const a = taps[i], b = taps[i + 1];
+    const bars = Math.max(1, Math.round((b - a) / barP));
+    const step = (b - a) / (bars * m);
+    for (let k = 0; k < bars * m; k++) out.push(a + k * step);
+  }
+  const lastBeatP = (taps[taps.length - 1] - taps[taps.length - 2]) / (Math.max(1, Math.round((taps[taps.length - 1] - taps[taps.length - 2]) / barP)) * m);
+  const firstBeatP = (taps[1] - taps[0]) / (Math.max(1, Math.round((taps[1] - taps[0]) / barP)) * m);
+  // před a za ťuky: navázat na nalezené doby (jen ty, které sedí na tempo), jinak pravidelně
+  const old = (AL.sync.beats || []).filter(x => x < taps[0] - firstBeatP * 0.5 || x > taps[taps.length - 1] + lastBeatP * 0.5);
+  const fill = (from, dir, P, limit) => {
+    const res = [];
+    let t = from + dir * P;
+    while (dir < 0 ? t > limit : t < limit) {
+      const near = old.reduce((best, x) => Math.abs(x - t) < Math.abs(best - t) ? x : best, Infinity);
+      const v = Math.abs(near - t) < P * 0.2 ? near : t;   // nalezená doba poblíž → vezmi ji (tempo se může hýbat)
+      res.push(v);
+      t = v + dir * P;
+    }
+    return res;
+  };
+  const before = fill(taps[0], -1, firstBeatP, 0).reverse();
+  const after = fill(taps[taps.length - 1], +1, lastBeatP, dur);
+  const beats = [...before, ...out, taps[taps.length - 1], ...after].map(r3);
+  pushSyncUndo();
+  AL.sync.beats = beats;
+  AL.sync.meter = m;
+  AL.sync.bar0 = before.length % m;   // index doby, která je 1. dobou taktu (první ťuk)
+  AL.barTaps = null;
+  commitSync();
+  renderAlongBody();
+  toast(`Mřížka složená z ťuků: ${beats.length} dob, ${m}/4`);
+}
+
 /** smazat vybraný akord (z textu i z časů); Zpět ho vrátí */
 function tlDeleteChord() {
   if (!AL.sel) return false;

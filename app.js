@@ -2125,6 +2125,7 @@ document.addEventListener('keydown', e => {
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); alRedo(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); alUndo(); }
     else if (AL.edit && AL.tap && k === 'j') { e.preventDefault(); tlTap(e.shiftKey); }
+    else if (AL.edit && AL.barTaps && k === 'k') { e.preventDefault(); tlBarTap(); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
       const dir = e.key === 'ArrowLeft' ? -1 : 1;
