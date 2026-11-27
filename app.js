@@ -1604,15 +1604,25 @@ function renderSheet() {
       if (armed || e.button !== 0) return;
       const c = e.target.closest('.c');
       const l = e.target.closest('.line');
-      if (!c || !l || e.target.closest('.chord, .line-tools')) return;
+      if (e.target.closest('.chord, .line-tools, .sec-label, button, input, textarea')) return;
+      // mimo písmenka (prázdné místo vedle řádků) = výběr obdélníkem jako na ploše
+      if (!c || !l) { if (e.pointerType === 'mouse' && !afterMode()) startMarquee(e, sheet); return; }
       const li = +l.dataset.li, i = +c.dataset.i;
       if (e.shiftKey && caret && caret.li === li) { selection = { li, a: caret.pos, b: i }; paintSelection(); return; }
-      selection = null; caret = { li, pos: i };
+      selection = null; msel = null; caret = { li, pos: i };
       paintSelection();
       if (e.pointerType !== 'mouse') return;      // na dotyku nechej rolování
       e.preventDefault();
       const move = ev => {
         const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.c');
+        // tažení do jiného řádku = výběr obdélníkem přes víc řádků
+        if ((!el || el.closest('.line') !== l) && Math.abs(ev.clientY - e.clientY) > 12 && !afterMode()) {
+          window.removeEventListener('pointermove', move);
+          window.removeEventListener('pointerup', up);
+          selection = null;
+          startMarquee(e, sheet, ev);
+          return;
+        }
         if (!el || el.closest('.line') !== l) return;
         const j = +el.dataset.i;
         if (j === i && !selection) return;
@@ -1670,7 +1680,77 @@ function placeChord(li, pos, chord) {
 // ---------- kopírování akordů mezi řádky ----------
 let selection = null;   // { li, a, b } označený úsek řádku
 let caret = null;       // { li, pos } kam vložit
-let chordClip = null;   // [{ d, root, q, bass }] – d = vzdálenost od začátku kopie
+let chordClip = null;   // [{ d, root, q, bass, dl? }] – d = vzdálenost od začátku kopie (u víc řádků dl = o kolik řádků níž, d = přesná pozice)
+let msel = null;        // Set('li:pos') – akordy označené obdélníkem (přes víc řádků)
+const mselKeys = () => [...(msel || [])].map(k => k.split(':').map(Number));
+
+/** výběr obdélníkem: táhni myší přes akordy (i přes víc řádků) */
+function startMarquee(e0, sheet, firstMove) {
+  e0.preventDefault?.();
+  closePopover();
+  selection = null; caret = null; msel = new Set(); paintSelection();
+  const x0 = e0.clientX + scrollX, y0 = e0.clientY + scrollY;
+  const box = h('div', { class: 'marquee' });
+  document.body.append(box);
+  const move = ev => {
+    if (ev.clientY > innerHeight - 40) scrollBy(0, 14); else if (ev.clientY < 40) scrollBy(0, -14);
+    const x1 = ev.clientX + scrollX, y1 = ev.clientY + scrollY;
+    const L = Math.min(x0, x1), R = Math.max(x0, x1), T = Math.min(y0, y1), B = Math.max(y0, y1);
+    Object.assign(box.style, { left: L + 'px', top: T + 'px', width: R - L + 'px', height: B - T + 'px' });
+    msel = new Set();
+    sheet.querySelectorAll('.line[data-li] > .c > .chord').forEach(ch => {
+      const r = ch.getBoundingClientRect();
+      const l = r.left + scrollX, t = r.top + scrollY;
+      if (l < R && l + r.width > L && t < B && t + r.height > T) msel.add(ch.closest('.line').dataset.li + ':' + ch.parentElement.dataset.i);
+    });
+    paintSelection();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    box.remove();
+    if (!msel.size) msel = null;
+    paintSelection();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  if (firstMove) move(firstMove);
+}
+/** zkopíruj akordy označené obdélníkem – řádky i pozice zůstanou, jak byly */
+function copyMulti() {
+  const song = current();
+  const keys = mselKeys().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (!keys.length) return;
+  const li0 = keys[0][0];
+  chordClip = keys.map(([li, pos]) => {
+    const c = song.lines[li]?.chords.find(x => x.pos === pos);
+    return c && { dl: li - li0, d: pos, root: c.root, q: c.q || '', bass: c.bass ?? null };
+  }).filter(Boolean);
+  msel = null;
+  paintSelection();
+  toast(`Zkopírováno akordů: ${chordClip.length} – klikni na první řádek, kam je chceš, a dej 📋 Vložit (nebo Ctrl+V)`);
+}
+/** plovoucí lišta: Kopírovat označené / Vložit zkopírované */
+function updateSelBar() {
+  let bar = document.getElementById('selBar');
+  const song = current();
+  const show = route.view === 'song' && song && !isPlay(song) && !afterMode() && (msel?.size || chordClip);
+  if (!show) { bar?.remove(); return; }
+  if (!bar) { bar = h('div', { id: 'selBar', class: 'sel-bar' }); document.body.append(bar); }
+  const pal = document.querySelector('.palette');
+  bar.style.bottom = (pal?.getClientRects().length ? innerHeight - pal.getBoundingClientRect().top : 0) + 14 + 'px';   // nad paletou
+  bar.innerHTML = '';
+  if (msel?.size) {
+    bar.append(h('span', {}, `Označeno akordů: ${msel.size}`),
+      h('button', { class: 'btn primary', onclick: copyMulti }, '⧉ Kopírovat'),
+      h('button', { class: 'btn ghost', title: 'Zrušit výběr', onclick: () => { msel = null; paintSelection(); } }, '×'));
+  } else {
+    const multi = chordClip.some(c => c.dl);
+    bar.append(h('span', {}, caret ? `Vložit ${chordClip.length} akordů ${multi ? 'od řádku, kam jsi klikl' : 'na místo kurzoru'}` : `Zkopírováno ${chordClip.length} akordů – klikni do řádku, kam je vložit`),
+      h('button', { class: 'btn primary', disabled: !caret, onclick: () => caret && pasteChords(caret.li, caret.pos) }, '📋 Vložit'),
+      h('button', { class: 'btn ghost', title: 'Zahodit zkopírované akordy', onclick: () => { chordClip = null; updateSelBar(); } }, '×'));
+  }
+}
 const selRange = () => selection && { li: selection.li, from: Math.min(selection.a, selection.b), to: Math.max(selection.a, selection.b) };
 
 function paintSelection() {
@@ -1678,8 +1758,11 @@ function paintSelection() {
   const r = selRange();
   if (r) $$(`.line[data-li="${r.li}"] > .c`).forEach(el => { const i = +el.dataset.i; if (i >= r.from && i <= r.to) el.classList.add('sel'); });
   if (caret && !r) $(`.line[data-li="${caret.li}"] > .c[data-i="${caret.pos}"]`)?.classList.add('caret');
+  $$('.chord.msel').forEach(el => el.classList.remove('msel'));
+  for (const [li, pos] of mselKeys()) $(`.line[data-li="${li}"] > .c[data-i="${pos}"] > .chord`)?.classList.add('msel');
+  updateSelBar();
 }
-function clearSelection() { selection = null; caret = null; paintSelection(); }
+function clearSelection() { selection = null; caret = null; msel = null; paintSelection(); }
 
 /** zkopíruj akordy z řádku li mezi pozicemi from–to; anchor = odkud se měří vzdálenost */
 function copyChords(li, from, to, anchor = from) {
@@ -1695,13 +1778,19 @@ function pasteChords(li, at) {
   const line = song.lines[li];
   if (!line) return;
   pushUndo(song);
+  const multi = chordClip.some(c => c.dl);
+  const touched = new Set();
   for (const c of chordClip) {
-    const pos = at + c.d;
+    const tl = song.lines[li + (c.dl || 0)];
+    if (!tl) continue;
+    const pos = multi ? c.d : at + c.d;   // víc řádků: akordy na stejná místa jako v originále
     if (pos < PRE_MIN) continue;
-    line.chords = line.chords.filter(x => x.pos !== pos);
-    line.chords.push({ pos, root: c.root, q: c.q, bass: c.bass });
+    if (multi && !touched.has(tl)) tl.chords = [];   // celá část: staré akordy v cílovém řádku nahraď
+    tl.chords = tl.chords.filter(x => x.pos !== pos);
+    tl.chords.push({ pos, root: c.root, q: c.q, bass: c.bass });
+    touched.add(tl);
   }
-  line.chords.sort((a, b) => a.pos - b.pos);
+  touched.forEach(tl => tl.chords.sort((a, b) => a.pos - b.pos));
   touch(song);
   renderSheet();
   toast(`Vloženo akordů: ${chordClip.length}`, 'Zpět', undo);
@@ -2164,6 +2253,7 @@ document.addEventListener('keydown', e => {
   }
   const k = e.key.toLowerCase();
   const editing = route.view === 'song' && current() && !isPlay(current());
+  if ((e.ctrlKey || e.metaKey) && !typing && editing && k === 'c' && msel?.size) { e.preventDefault(); copyMulti(); return; }
   if ((e.ctrlKey || e.metaKey) && !typing && editing && k === 'c' && selection) {
     e.preventDefault();
     const r = selRange();

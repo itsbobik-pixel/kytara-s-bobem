@@ -931,3 +931,8 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .al-note { display: inline-grid; place-items: center; width: 1.7em; height: 1.7em; border-radius: 50%; font-size: .9em; font-weight: 800; color: color-mix(in srgb, var(--d1) 80%, var(--ink)); background: color-mix(in srgb, var(--d1) 16%, transparent); transition: transform .15s, background .15s, color .15s; }
 .al-note.now { background: var(--d1); color: var(--d1-ink); transform: scale(1.25); box-shadow: 0 0 0 4px color-mix(in srgb, var(--d1) 30%, transparent); }
 .al-lyrics .al-now:not(:has(> :not([hidden]))) { display: none; }
+/* výběr akordů obdélníkem (jako ikony na ploše) + lišta Kopírovat / Vložit */
+.marquee { position: absolute; z-index: 60; border: 1.5px solid var(--d3); background: color-mix(in srgb, var(--d3) 14%, transparent); border-radius: 4px; pointer-events: none; }
+.chord.msel { outline: 2.5px solid var(--ink); outline-offset: 2px; }
+.sel-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 70; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 16px; border-radius: 999px; background: var(--surface); border: 1.5px solid var(--line); box-shadow: var(--shadow); font-weight: 700; font-size: 14px; max-width: calc(100vw - 32px); }
+.sel-bar .btn { padding: 6px 14px; }
