@@ -6,8 +6,8 @@
 //
 // Použití (z kořene projektu):
 //   node helper/import_songs.mjs                 → jen kontrola (nic neukládá), vypíše tabulku a varování
-//   node helper/import_songs.mjs --import        → přidá do zpěvníku (soukromě, jako admin) a zařadí do fronty na Play Along
-//   node helper/import_songs.mjs --import --public   → totéž, ale veřejně (pozor na licence OSA)
+//   node helper/import_songs.mjs --import        → přidá do zpěvníku (čeká na schválení – vidí jen admin) a zařadí do fronty
+//   node helper/import_songs.mjs --import --private  → totéž, ale soukromě 🔒 (i po schválení jen pro admina)
 //   node helper/import_songs.mjs --report        → výsledky fronty: kolik slov sedí s nahrávkou, které řádky nesedí
 //   volitelně --dir "C:\jina\slozka", --no-queue (jen přidat, Play Along nespouštět), --no-video (bez kontroly videí)
 //
@@ -137,7 +137,7 @@ async function doImport(songs, rest) {
   const state = fs.existsSync(STATE) ? JSON.parse(fs.readFileSync(STATE, 'utf8')) : {};
   const admin = (await rest('GET', 'admins?select=user_id&limit=1'))[0]?.user_id;
   if (!admin) throw new Error('V tabulce admins nikdo není.');
-  const isPublic = flag('--public');
+  const isPublic = !flag('--private');   // výchozí: veřejná, ale čeká na schválení (vidí ji jen admin)
   for (const s of songs) {
     if (state[s.file]) { console.log(`= ${s.file}: už importováno (${state[s.file]})`); continue; }
     const blocking = s.warn.filter(w => /chybí YouTube|žádný text|nedostupné|nejde vložit/.test(w));
@@ -150,7 +150,7 @@ async function doImport(songs, rest) {
     if (!flag('--no-queue')) await rest('POST', 'jobs', { song_id: id, yt: s.yt, created_by: admin });
     state[s.file] = id;
     fs.writeFileSync(STATE, JSON.stringify(state, null, 1));
-    console.log(`✓ ${s.file} → ${id} (${isPublic ? 'veřejně' : 'jen pro tebe'})${flag('--no-queue') ? '' : ', ve frontě'}`);
+    console.log(`✓ ${s.file} → ${id} (${isPublic ? 'čeká na schválení' : 'soukromá 🔒'})${flag('--no-queue') ? '' : ', ve frontě'}`);
   }
 }
 
