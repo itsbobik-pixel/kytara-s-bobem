@@ -677,7 +677,12 @@ function renderTimelineShell() {
         h('button', { title: 'Přehrát / pauza (mezerník)', id: 'tlPlay', onclick: () => alToggle() }, AL.playing ? '⏸' : '▶'),
         h('button', { title: 'Stop – zastavit a vrátit na začátek', onclick: () => { alPause(); alSeek(0); } }, '⏹'),
         h('button', { title: 'O 5 s dál', onclick: () => alSeek(alNow() + 5) }, '+5 s')),
-      h('span', { class: 'tl-hint' }, 'Táhni akord, slovo nebo řádek – akord se přicvakne na dobu (Shift = volně). Vybraný akord: ←/→ o dobu. Klik do prázdna = skok.'),
+      h('span', { class: 'tl-hint' }, 'Táhni akord, slovo nebo řádek (Shift = opačně než 🧲). Vybraný akord: ←/→ posun. Klik do prázdna = skok.'),
+      h('button', {
+        class: 'tbtn' + (tlSnapOn() ? ' on' : ''),
+        title: 'Přicvakávat akordy na doby (tažení, šipky, ťukání). Vypnuto = volně, šipky po 0,05 s.',
+        onclick: () => { try { localStorage.setItem('ksb.along.snap', tlSnapOn() ? '0' : '1'); } catch { /* nic */ } renderAlongBody(); },
+      }, tlSnapOn() ? '🧲 Na doby: zap' : '🧲 Na doby: vyp'),
       h('button', {
         class: 'tbtn' + (AL.tap ? ' on' : ''), id: 'tlTap',
         title: 'Ťukání: pusť písničku a při každé změně akordu zmáčkni J – nejbližší akord skočí na ten okamžik (na dobu)',
@@ -824,7 +829,7 @@ function tlDrag(e, el, kind, L, obj) {
   const t0 = kind === 'chord' ? obj.t : kind === 'word' ? obj.s : L.s;
   const snapD = (dx, free) => {   // posun v s, přicvaknutý na nejbližší dobu
     const d = dx / pps;
-    if (free || !AL.sync?.beats?.length || t0 == null) return d;
+    if (free === tlSnapOn() || !AL.sync?.beats?.length || t0 == null) return d;   // Shift obrací přicvakávání
     return nearestBeat(t0 + d) - t0;
   };
   const move = ev => {
@@ -857,6 +862,8 @@ function tlDrag(e, el, kind, L, obj) {
   el.addEventListener('pointercancel', up);
 }
 
+/** přicvakávání na doby v editoru (zapnuto, dokud ho uživatel nevypne) */
+function tlSnapOn() { try { return localStorage.getItem('ksb.along.snap') !== '0'; } catch { return true; } }
 /** nejbližší doba (když chybí, vrátí čas beze změny) */
 function nearestBeat(t) {
   const b = AL.sync?.beats;
@@ -873,7 +880,7 @@ function tlNudge(dir, fine) {
   if (!c || c.t == null) return false;
   let to = c.t + dir * 0.05;
   const b = AL.sync?.beats;
-  if (!fine && b?.length) {
+  if (!fine && b?.length && tlSnapOn()) {
     const cur = nearestBeat(c.t);
     const i = b.indexOf(cur);
     to = b[Math.max(0, Math.min(b.length - 1, i + dir))];
@@ -892,7 +899,7 @@ function tlTap(free) {
   if (!ch.length) return;
   const c = ch.reduce((a, b) => (Math.abs(b.t - now) < Math.abs(a.t - now) ? b : a));
   const L = AL.model.lines.find(x => x.li === c.li);
-  const to = free ? now : nearestBeat(now);
+  const to = free || !tlSnapOn() ? now : nearestBeat(now);
   pushSyncUndo();
   shiftSync('chord', L, c, to - c.t);
   commitSync();
