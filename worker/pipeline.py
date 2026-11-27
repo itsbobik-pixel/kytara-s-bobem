@@ -284,7 +284,7 @@ def chord_items(lines, wsync, step=2.0):
     return items
 
 
-def snap_chords(items, beats, C, dur, shift=0, EARLY=4.5, LATE=2.2, FREE=24.0, LAMBDA=0.35):
+def snap_chords(items, beats, C, dur, shift=0, EARLY=2.0, LATE=1.0, FREE=24.0, LAMBDA=0.35):
     types = {}
     for it in items:
         types.setdefault(it['key'], len(types))
