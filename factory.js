@@ -61,17 +61,13 @@ function beatPeriod() {
 }
 function nearestBeatT(t) { return typeof nearestBeat === 'function' ? nearestBeat(t) : t; }
 
-/** co ťuká klávesa K: 'beats' = doby (mřížka), 'chords' = změny akordů – podle naposledy použitého tlačítka ŤUK */
+/** co se právě ťuká: 'beats' = doby (klávesa K), 'chords' = změny akordů (klávesa J) */
 function facMode() {
   if (!AL.factory) return null;
   if (!AL.sync?.beats?.length) return 'beats';
   return FAC.mode || (AL.sync?.stage === 'beats' ? 'beats' : 'chords');
 }
-function setFacMode(m) {
-  FAC.mode = m;
-  document.getElementById('facCountB')?.classList.toggle('fac-k', m === 'beats');
-  document.getElementById('facCount')?.classList.toggle('fac-k', m === 'chords');
-}
+function setFacMode(m) { FAC.mode = m; }
 
 /** tlačítka továrny – všechno v jedné liště nad časovou osou */
 function factoryPanel(song) {
@@ -103,8 +99,8 @@ function panelBeats() {
   FAC.meter = AL.sync.meter || 4;
   return [
     h('button', {
-      class: 'fac-tap' + (facMode() === 'beats' ? ' fac-k' : ''), id: 'facCountB',
-      title: 'Ťukání dob: pusť a ťukej na každou dobu 1 2 3 4 – první ťuk = 1. doba taktu. Klidně celou písničku. Klávesa K ťuká to, co jsi ťukal naposled.',
+      class: 'fac-tap', id: 'facCountB',
+      title: 'Ťukání dob: pusť a ťukej na každou dobu 1 2 3 4 – první ťuk = 1. doba taktu. Klidně celou písničku. Klávesa K.',
       onpointerdown: e => { e.preventDefault(); setFacMode('beats'); facTap(); },
     }, `ŤUK doby · ${FAC.taps.length}`),
     h('div', { class: 'tgroup' },
@@ -232,8 +228,8 @@ function panelChords() {
     h('span', { class: 'fac-next-chip', title: next ? `další akord – ř. ${next.li + 1}: ${(song.lines[next.li].text || '(mezihra)').slice(0, 40)}` : '' },
       next ? h('span', { class: 'chord ' + degClass(next.ch.root, song.key), id: 'facNext' }, chordName(next.ch, song.key)) : h('b', { id: 'facNext' }, '✓')),
     h('button', {
-      class: 'fac-tap' + (facMode() === 'chords' ? ' fac-k' : ''), id: 'facCount',
-      title: 'Ťukání akordů: pusť písničku a ťukni pokaždé, když se změní akord (zvýrazněný blok na ose). Přicvakne se na dobu, se Shiftem přesně. Klávesa K ťuká to, co jsi ťukal naposled.',
+      class: 'fac-tap', id: 'facCount',
+      title: 'Ťukání akordů: pusť písničku a ťukni pokaždé, když se změní akord (zvýrazněný blok na ose). Přicvakne se na dobu, se Shiftem přesně. Klávesa J.',
       onpointerdown: e => { e.preventDefault(); setFacMode('chords'); facTap(); },
     }, `ŤUK akordy · ${Math.min(FAC.idx, seq.length)}/${seq.length}`),
     h('div', { class: 'tgroup' },

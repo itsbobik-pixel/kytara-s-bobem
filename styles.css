@@ -916,5 +916,6 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .fac-after-hint { font-size: 13px; color: var(--muted); align-self: center; max-width: 340px; line-height: 1.3; }
 /* tlačítko Továrna zapnuté (přepínač) */
 .btn.ghost.fac-on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-/* továrna: ŤUK tlačítko, které ťuká klávesa K */
-.fac-tap.fac-k::after { content: ' K'; font-size: 11px; opacity: .7; }
+/* továrna: klávesy u ŤUK tlačítek (K = doby, J = akordy) */
+#facCountB::after { content: ' K'; font-size: 11px; opacity: .7; }
+#facCount::after { content: ' J'; font-size: 11px; opacity: .7; }

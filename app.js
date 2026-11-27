@@ -2178,7 +2178,8 @@ document.addEventListener('keydown', e => {
     if (e.key === ' ') { e.preventDefault(); alToggle(); }
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); alRedo(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); alUndo(); }
-    else if (AL.factory && k === 'k') { e.preventDefault(); facTap(); }
+    else if (AL.factory && k === 'k' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setFacMode('beats'); facTap(); }
+    else if (AL.factory && k === 'j' && !e.ctrlKey && !e.metaKey && AL.sync?.beats?.length) { e.preventDefault(); setFacMode('chords'); facTap(); }
     else if (AL.edit && AL.tap && k === 'j') { e.preventDefault(); tlTap(e.shiftKey); }
     else if (AL.edit && AL.barTaps && k === 'k') { e.preventDefault(); tlBarTap(); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -2199,6 +2200,34 @@ document.addEventListener('keydown', e => {
     toggleAutoscroll();
   }
 });
+
+// =========================================================
+//  NOVÁ VERZE STRÁNKY
+//  GitHub Pages drží index.html v cache až 10 min → stránka se občas podívá, jestli na webu není vyšší ?v=N.
+//  Když ano: v klidu (nic nehraje, nic se neukládá, nejsi v editoru) se sama obnoví, jinak nabídne tlačítko.
+// =========================================================
+const APP_V = +(/[?&]v=(\d+)/.exec(document.querySelector('link[href*="styles.css"]')?.getAttribute('href') || '')?.[1] || 0);
+let newV = 0;
+async function checkVersion() {
+  if (!APP_V || !/^https?:/.test(location.protocol) || document.hidden) return;
+  try {
+    // cache: 'reload' = vezmi ze sítě a přepiš uloženou kopii → následné obnovení už dostane novou stránku
+    const html = await (await fetch(location.pathname + '?vcheck=' + Date.now(), { cache: 'reload' })).text();
+    const v = +(/styles\.css\?v=(\d+)/.exec(html)?.[1] || 0);
+    if (v > APP_V) { newV = v; offerUpdate(); }
+  } catch { /* offline – nevadí */ }
+}
+function offerUpdate() {
+  if (!newV) return;
+  const playing = typeof AL !== 'undefined' && AL.playing;
+  const saving = /Ukládám/.test(statusText);
+  const busy = route.view === 'song' || (route.view === 'along' && AL.factory) || saving || playing || $('#modalRoot')?.children.length;
+  if (!busy) { location.reload(); return; }
+  toast('Je nová verze stránky.', 'Obnovit', () => location.reload());
+}
+setInterval(checkVersion, 3 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+setTimeout(checkVersion, 5000);
 
 // se Supabase se songy teprve načítají → odkaz na konkrétní song nesmí hned přesměrovat na seznam
 if (window.KSB_SUPA) auth.loading = true;
