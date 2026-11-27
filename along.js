@@ -25,23 +25,32 @@ const AL = {
 };
 const r3 = x => Math.round(x * 1000) / 1000;
 
-// předstih akordů: kytarista potřebuje akord vidět kousek před změnou (+ zpoždění sluchátek / reproduktoru)
-const LEAD_KEY = 'ksb.along.lead';
-let alLead = (() => { try { const v = parseFloat(localStorage.getItem(LEAD_KEY)); return Number.isFinite(v) ? v : 0.3; } catch { return 0.3; } })();
-function setLead(v) {
-  alLead = Math.round(Math.max(-0.5, Math.min(1.5, v)) * 10) / 10;
-  try { localStorage.setItem(LEAD_KEY, String(alLead)); } catch { /* nic */ }
-  const el = document.getElementById('alLead');
-  if (el) el.textContent = leadLabel();
+// posun zobrazení dřív/později – zvlášť text a akordy (zpoždění sluchátek / reproduktoru / přepisu;
+// akordy kytarista potřebuje vidět chvilku před změnou). Uloží se v prohlížeči.
+const OFFS = {
+  text:   { key: 'ksb.along.textOff',  def: 0.2, label: 'Text' },
+  chords: { key: 'ksb.along.chordOff', def: 0.4, label: 'Akordy' },
+};
+const alOff = {};
+for (const [k, o] of Object.entries(OFFS)) {
+  try { const v = parseFloat(localStorage.getItem(o.key)); alOff[k] = Number.isFinite(v) ? v : o.def; } catch { alOff[k] = o.def; }
+}
+const offLabel = k => {
+  const v = alOff[k], L = OFFS[k].label;
+  return v === 0 ? `${L}: přesně` : `${L}: o ${String(Math.abs(v)).replace('.', ',')} s ${v > 0 ? 'dřív' : 'později'}`;
+};
+function setOff(k, v) {
+  alOff[k] = Math.round(Math.max(-1, Math.min(2, v)) * 10) / 10;
+  try { localStorage.setItem(OFFS[k].key, String(alOff[k])); } catch { /* nic */ }
+  const el = document.getElementById('alOff-' + k);
+  if (el) el.textContent = offLabel(k);
   alTick(true);
 }
-const leadLabel = () => alLead === 0 ? 'Akordy: přesně' : `Akordy: o ${String(Math.abs(alLead)).replace('.', ',')} s ${alLead > 0 ? 'dřív' : 'později'}`;
-function leadControl() {
-  return h('div', { class: 'tgroup', title: 'Kdy se rozsvítí akord: dřív = máš čas ho chytit (a vyrovná zpoždění sluchátek)' },
-    h('button', { onclick: () => setLead(alLead - 0.1), title: 'Akordy později' }, '−'),
-    h('span', { id: 'alLead', class: 'al-lead' }, leadLabel()),
-    h('button', { onclick: () => setLead(alLead + 0.1), title: 'Akordy dřív' }, '+'));
-}
+const offControl = k => h('div', { class: 'tgroup', title: `${OFFS[k].label} ukazuje pozadu → +, předbíhá → −` },
+  h('button', { onclick: () => setOff(k, alOff[k] - 0.1), title: 'později' }, '−'),
+  h('span', { id: 'alOff-' + k, class: 'al-lead' }, offLabel(k)),
+  h('button', { onclick: () => setOff(k, alOff[k] + 0.1), title: 'dřív' }, '+'));
+const leadControl = () => [offControl('text'), offControl('chords')];
 
 // ---------- data ----------
 function syncFromAlign(out) {
@@ -549,7 +558,8 @@ function alLoop() {
 
 function alTick(force) {
   if (!AL.model || !AL.refs) return;
-  const t = alNow();
+  const tReal = alNow();
+  const t = tReal + (AL.edit ? 0 : alOff.text);   // zobrazený čas textu (při ladění časů bez posunu)
   const song = alSong();
   const ad = $('#alAd');
   if (ad) ad.hidden = !(AL.engine === 'yt' && AL.ytAd);
@@ -557,10 +567,10 @@ function alTick(force) {
   const time = $('#alTime');
   if (time) {
     const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-    time.textContent = fmt(t) + ' / ' + fmt(AL.dur || AL.sync?.dur || 0);
+    time.textContent = fmt(tReal) + ' / ' + fmt(AL.dur || AL.sync?.dur || 0);
   }
   const seek = $('#alSeek');
-  if (seek && document.activeElement !== seek) seek.value = t;
+  if (seek && document.activeElement !== seek) seek.value = tReal;
 
   // aktuální řádek = poslední, který už začal (s malým předstihem)
   const lines = AL.model.lines;
@@ -594,7 +604,7 @@ function alTick(force) {
   // akordy
   const ch = AL.model.chords;
   let ci = -1;
-  const tc = t + alLead;   // akordy s předstihem
+  const tc = tReal + (AL.edit ? 0 : alOff.chords);   // akordy s vlastním posunem
   for (let i = 0; i < ch.length; i++) { if (ch[i].t <= tc) ci = i; else break; }
   if (ci !== AL.lastChord || force) {
     if (AL.nowChordEl) AL.nowChordEl.classList.remove('now');
@@ -616,7 +626,7 @@ function alTick(force) {
     const a = ci >= 0 ? ch[ci].t : 0, b = ch[ci + 1]?.t;
     meter.style.width = b ? Math.min(100, Math.max(0, (tc - a) / Math.max(0.1, b - a) * 100)) + '%' : '0%';
   }
-  if (AL.edit) tlPlayhead(t);
+  if (AL.edit) tlPlayhead(tReal);
 }
 
 // ---------- časová osa (Doladit) ----------
