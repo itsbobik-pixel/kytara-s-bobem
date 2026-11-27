@@ -829,3 +829,8 @@ body.al-editing .al-yt { bottom: 236px; }
 .sl-link:hover { background: var(--surface-2); text-decoration: underline; }
 .sl-link-along { color: color-mix(in srgb, var(--d5) 85%, var(--ink)); }
 .sl-link-chords { color: color-mix(in srgb, var(--d3) 85%, var(--ink)); }
+
+/* přihlášení přes Google */
+.google-btn { width: 100%; justify-content: center; gap: 10px; margin: 6px 0 2px; }
+.google-btn .g-logo { font-weight: 800; background: conic-gradient(from -45deg, #ea4335 0 25%, #fbbc05 0 50%, #34a853 0 75%, #4285f4 0); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 18px; }
+.modal .or { text-align: center; color: var(--muted); font-size: 13px; margin: 10px 0 4px; }

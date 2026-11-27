@@ -328,7 +328,7 @@ const SEC_WORDS = [
   [/^(předrefrén|predrefren|prerefrén|prerefren|pre-?chorus|pre)$/i, 'pre'],
   [/^(refrén|refren|ref|r|chorus)$/i, 'chorus'],
   [/^(bridge|most)$/i, 'bridge'],
-  [/^(mezihra|interlude|instrumental|instr)$/i, 'inter'],
+  [/^(mezihra|interlude|instrumental|instr|tab|riff)$/i, 'inter'],
   [/^(sólo|solo)$/i, 'solo'],
   [/^(outro|dohra|závěr|zaver|coda|konec)$/i, 'outro'],
 ];
@@ -562,15 +562,38 @@ function renderTopActions(extra = []) {
     ...extra,
     auth.mode === 'supabase' && (auth.user && !auth.anon
       ? h('button', {
-          class: 'btn ghost user-btn', title: 'Klikni pro odhlášení',
-          onclick: () => window.KSB_SUPA.logout(),
+          class: 'btn ghost user-btn', title: 'Můj účet: značení akordů, odhlášení',
+          onclick: e => openAccountMenu(e.currentTarget),
         }, '👤 ', auth.name || 'Já', auth.admin ? h('small', {}, ' admin') : null)
       : h('button', { class: 'btn primary', onclick: () => window.KSB_SUPA.openLogin() }, 'Přihlásit')),
-    h('button', {
+    // bez účtu (verze artefakt) zůstává přepínač tady; ve společném zpěvníku je v nastavení účtu
+    auth.mode !== 'supabase' && h('button', {
       class: 'btn ghost', title: 'Přepnout značení (česky H / anglicky B)',
-      onclick: () => { settings.notation = settings.notation === 'cz' ? 'intl' : 'cz'; saveSettings(); render(); },
+      onclick: () => setNotation(settings.notation === 'cz' ? 'intl' : 'cz'),
     }, 'Značení: ', h('b', {}, settings.notation === 'cz' ? 'H' : 'B')),
   ].filter(Boolean));
+}
+
+function setNotation(n) {
+  settings.notation = n;
+  saveSettings();
+  if (auth.mode === 'supabase' && auth.user && !auth.anon) window.KSB_SUPA.saveNotation(n);
+  render();
+}
+
+function openAccountMenu(anchor) {
+  const opt = (n, label, hint) => h('button', {
+    class: 'chip' + (settings.notation === n ? ' armed' : ''), title: hint,
+    onclick: () => { closePopover(); setNotation(n); },
+  }, label);
+  openPopover(anchor, h('div', { class: 'account-menu' },
+    h('h5', {}, '👤 ', auth.name || 'Můj účet', auth.admin ? ' (admin)' : ''),
+    h('h5', { style: 'margin-top:10px' }, 'Značení akordů'),
+    h('div', { class: 'chips' },
+      opt('intl', 'B – mezinárodní', 'A#, B (jako v angličtině)'),
+      opt('cz', 'H – české', 'B = A#, H = B')),
+    h('div', { class: 'row', style: 'margin-top:12px' },
+      h('button', { class: 'btn ghost', onclick: () => { closePopover(); window.KSB_SUPA.logout(); } }, 'Odhlásit'))));
 }
 
 // =========================================================

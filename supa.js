@@ -134,6 +134,8 @@ window.KSB_SUPA = (() => {
     auth.admin = false;
     auth.anon = !!user?.is_anonymous;
     auth.name = user?.user_metadata?.name || (auth.anon ? 'Host' : '');
+    // značení akordů: nastavení účtu; bez účtu vždy mezinárodní (B)
+    settings.notation = (user && !auth.anon && user.user_metadata?.notation) || (user && !auth.anon ? settings.notation : 'intl');
     if (user) {
       const { data } = await sb.from('admins').select('user_id').eq('user_id', user.id).maybeSingle();
       auth.admin = !!data;
@@ -287,6 +289,14 @@ window.KSB_SUPA = (() => {
       },
         h('h2', {}, 'Přihlásit se'),
         h('p', { class: 'sub' }, reason || 'Přihlášení potřebuješ, abys mohl přidávat a upravovat songy. Číst může kdokoli.'),
+        h('button', {
+          class: 'btn google-btn', type: 'button',
+          onclick: async () => {
+            const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+            if (error) err.textContent = 'Přihlášení přes Google teď nejde. Zkus e-mail.';
+          },
+        }, h('b', { class: 'g-logo' }, 'G'), 'Přihlásit přes Google'),
+        h('p', { class: 'or' }, 'nebo e-mailem'),
         h('label', { class: 'field' }, h('span', {}, 'E-mail'), input),
         h('p', { class: 'hint' }, 'Žádné heslo: pošlu ti odkaz, kterým se přihlásíš.'),
         err,
@@ -359,6 +369,11 @@ window.KSB_SUPA = (() => {
     return data.status;
   }
 
+  /** značení akordů do nastavení účtu (ať platí na všech zařízeních) */
+  function saveNotation(n) {
+    setTimeout(() => { sb.auth.updateUser({ data: { notation: n } }).catch(() => { /* nic, zůstane aspoň v prohlížeči */ }); }, 0);
+  }
+
   /** host bez e-mailu: anonymní účet, aby mohl přidat song (ten pak čeká na schválení) */
   async function signInAnon() {
     const { data, error } = await sb.auth.signInAnonymously();
@@ -384,5 +399,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, requestJob, checkJob, jobStatus, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, requestJob, checkJob, jobStatus, importLocal, ensureLoaded, loadAll, approve };
 })();

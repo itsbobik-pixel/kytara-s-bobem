@@ -149,6 +149,8 @@ class Queue:
                 except urllib.error.HTTPError:
                     pass
             (dest / "sync.json").write_text(json.dumps(sync, ensure_ascii=False), encoding="utf-8")
+            # přepis zpěvu (WhisperX) + statistiky – jen lokálně, pro diagnostiku nesedícího textu
+            (dest / "stats.json").write_text(json.dumps(out.get("stats") or {}, ensure_ascii=False), encoding="utf-8")
             stats = {k: v for k, v in (out.get("stats") or {}).items() if k != "transcript"}
             self.set_job(jid, status="done", stats=stats)
             print(f"   ✓ hotovo: slova {stats.get('matched')}/{stats.get('ours')}, {stats.get('bpm')} BPM, {stats.get('seconds')} s")
