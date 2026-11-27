@@ -789,8 +789,8 @@ function renderLibrary() {
             },
           }, '✓ Schválit') : null,
           s.hasSync !== false ? h('a', { class: 'sl-link sl-link-along', href: '#along-' + s.id, title: 'Hudba, text a akordy v rytmu' }, 'Play Along') : null,
-          s.hasSync !== false ? h('a', { class: 'sl-link sl-link-lyrics', href: '#lyrics-' + s.id, title: 'Jen text, který jede s videem – bez akordů' }, 'Moving Lyrics') : null,
-          h('a', { class: 'sl-link sl-link-chords', href: '#play-' + s.id, title: 'Jen text s akordy' }, 'Akordy'))));
+          h('a', { class: 'sl-link sl-link-chords', href: '#play-' + s.id, title: 'Jen text s akordy' }, 'Akordy'),
+          s.hasSync !== false ? h('a', { class: 'sl-link sl-link-lyrics', href: '#lyrics-' + s.id, title: 'Jen text, který jede s videem – bez akordů' }, 'Moving Lyrics') : null)));
     });
   }
   fillGrid();
