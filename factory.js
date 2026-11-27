@@ -78,6 +78,7 @@ function factoryPanel(song) {
     h('div', { class: 'tgroup' },
       h('button', { title: 'Začátek písně = aktuální místo (praporek jde taky táhnout na ose)', onclick: () => setStart(alNow()) }, ico('flag'), ' ', h('span', { id: 'facStartT' }, fmtT(FAC.start ?? AL.sync?.start))),
       h('button', { disabled: (FAC.start ?? AL.sync?.start) == null, title: 'Přehrát od startu (kousek před ním)', onclick: () => { alSeek(Math.max(0, (FAC.start ?? AL.sync.start) - 2)); if (!AL.playing) alPlay(); } }, '▶')),
+    h('div', { class: 'fac-taps' }, tapBtn('beats'), AL.sync?.beats?.length ? tapBtn('chords') : null),
     ...panelBeats(),
     ...(AL.sync?.beats?.length ? panelChords() : []),
     leadControl(),
@@ -98,11 +99,6 @@ function panelBeats() {
   if (FAC.start == null && AL.sync.start != null) FAC.start = AL.sync.start;
   FAC.meter = AL.sync.meter || 4;
   return [
-    h('button', {
-      class: 'fac-tap', id: 'facCountB',
-      title: 'Ťukání dob: pusť a ťukej na každou dobu 1 2 3 4 – první ťuk = 1. doba taktu. Klidně celou písničku. Klávesa K.',
-      onpointerdown: e => { e.preventDefault(); setFacMode('beats'); facTap(); },
-    }, `ŤUK doby · ${FAC.taps.length}`),
     h('div', { class: 'tgroup' },
       h('button', { title: 'Smazat ťuky a začít znovu', disabled: !FAC.taps.length, onclick: () => { FAC.taps = []; renderAlongBody(); } }, '✕'),
       h('button', { class: 'fac-ok', id: 'facApply', title: 'Složit z ťuků mřížku dob', disabled: FAC.taps.length < 8, onclick: applyBeatTaps }, '✓ Použít')),
@@ -124,7 +120,7 @@ function facTap() {
   if (facMode() === 'chords') { tapChord(t); return; }
   FAC.taps.push(t);
   const c = document.getElementById('facCountB');
-  if (c) c.textContent = `ŤUK doby · ${FAC.taps.length}`;
+  if (c) c.textContent = FAC.taps.length;
   const a = document.getElementById('facApply');
   if (a) a.disabled = FAC.taps.length < 8;
   renderTimeline();
@@ -216,32 +212,41 @@ function applyBeatTaps() {
 
 // ---------- ťukání akordů ----------
 function chordSeq() { return AL.model.chords.filter(c => c.t != null || true); }
+/** ťukací tlačítka: obrázek klávesy (K = doby, J = akordy) + malý počet; popisek při najetí */
+function tapBtn(kind) {
+  const beats = kind === 'beats';
+  const seq = beats ? null : chordSeq();
+  const tip = beats
+    ? 'ŤUK doby (klávesa K): pusť písničku a ťukej na každou dobu 1 2 3 4 – první ťuk = 1. doba taktu. Pak ✓ Použít.'
+    : 'ŤUK akordy (klávesa J): ťukni pokaždé, když se změní akord. Ťuk patří akordu nejblíž (pak dalším po řadě). Přicvakne se na dobu, se Shiftem přesně.';
+  return h('button', {
+    class: 'fac-tap fac-tap-' + kind, 'data-tip': tip, 'aria-label': tip,
+    onpointerdown: e => { e.preventDefault(); setFacMode(kind); facTap(); },
+  },
+    h('span', { class: 'fac-key' }, beats ? 'K' : 'J'),
+    h('span', { class: 'fac-ico' }, beats ? '🥁' : '🎸'),
+    h('small', { id: beats ? 'facCountB' : 'facCount' }, beats ? FAC.taps.length : `${Math.max(0, Math.min(FAC.idx, seq.length))}/${seq.length}`));
+}
 function panelChords() {
   const seq = chordSeq();
-  if (FAC.idx < 0 || FAC.idx > seq.length) {
-    const st = AL.sync.start ?? 0;
-    FAC.idx = Math.max(0, seq.findIndex(c => (c.t ?? 0) >= st - 0.5));
-  }
+  if (FAC.idx < 0 || FAC.idx > seq.length) FAC.idx = 0;
   const song = alSong();
   const next = seq[FAC.idx];
   return [
     h('span', { class: 'fac-next-chip', title: next ? `další akord – ř. ${next.li + 1}: ${(song.lines[next.li].text || '(mezihra)').slice(0, 40)}` : '' },
       next ? h('span', { class: 'chord ' + degClass(next.ch.root, song.key), id: 'facNext' }, chordName(next.ch, song.key)) : h('b', { id: 'facNext' }, '✓')),
-    h('button', {
-      class: 'fac-tap', id: 'facCount',
-      title: 'Ťukání akordů: pusť písničku a ťukni pokaždé, když se změní akord (zvýrazněný blok na ose). Přicvakne se na dobu, se Shiftem přesně. Klávesa J.',
-      onpointerdown: e => { e.preventDefault(); setFacMode('chords'); facTap(); },
-    }, `ŤUK akordy · ${Math.min(FAC.idx, seq.length)}/${seq.length}`),
-    h('div', { class: 'tgroup' },
-      h('button', { title: 'Vrátit poslední ťuk', disabled: !FAC.idx, onclick: () => { alUndo(); FAC.idx = Math.max(0, FAC.idx - 1); renderAlongBody(); } }, '↶'),
-      h('button', { title: 'Začít od prvního akordu po startu', onclick: () => { FAC.idx = -1; alSeek(Math.max(0, (AL.sync.start ?? 0) - 2)); renderAlongBody(); } }, '⏮'),
-      h('button', { title: 'Další ťuk patří prvnímu akordu po tomhle místě', onclick: () => { const t = alNow(); FAC.idx = Math.max(0, seq.findIndex(c => (c.t ?? 0) >= t - 0.3)); renderAlongBody(); } }, '↪'),
-    ),
   ];
 }
 
 function tapChord(t) {
   const seq = chordSeq();
+  // první ťuk, ťuk po přetočení zpět nebo po delší pauze → patří akordu nejblíž (jinak další po řadě)
+  if (FAC.lastTap == null || t < FAC.lastTap - 0.2 || t - FAC.lastTap > 6) {
+    let best = -1, bd = Infinity;
+    seq.forEach((x, i) => { if (x.t != null && Math.abs(x.t - t) < bd) { bd = Math.abs(x.t - t); best = i; } });
+    if (best >= 0) FAC.idx = best;
+  }
+  FAC.lastTap = t;
   const c = seq[FAC.idx];
   if (!c) return;
   const L = AL.model.lines.find(x => x.li === c.li);
@@ -259,7 +264,7 @@ function tapChord(t) {
   const ln = document.getElementById('facNextLine');
   if (ln) ln.textContent = n ? `ř. ${n.li + 1}` : '';
   const cnt = document.getElementById('facCount');
-  if (cnt) cnt.textContent = `ŤUK akordy · ${Math.min(FAC.idx, seq.length)}/${seq.length}`;
+  if (cnt) cnt.textContent = `${Math.min(FAC.idx, seq.length)}/${seq.length}`;
   AL.lastChord = -2;
   renderTimeline();
 }
