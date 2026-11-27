@@ -1061,9 +1061,12 @@ function relocateChord(L, c, t) {
   for (let i = 0; i < textLines.length; i++) {
     const X = textLines[i], next = textLines[i + 1];
     const first = X.words[0].s, end = wordEnd(X.words[X.words.length - 1]);
-    if (t < first - 0.4) {   // v pauze před řádkem → před text (čím dřív, tím víc vlevo)
+    if (t < first - 0.4) {   // v pauze před řádkem → těsně před text (víc akordů před textem: zleva podle času)
       tgt = X;
-      pos = -Math.min(8, Math.max(1, Math.round((first - t) / 0.4)));
+      const before = song.lines[X.li].chords.filter(x => x.pos < 0 && x !== song.lines[L.li]?.chords.find(y => y.pos === c.pos))
+        .map(x => ({ x, t: X.chords.find(m => m.pos === x.pos)?.t ?? -1 }));
+      const later = before.filter(o => o.t > t).length;   // kolik předtextových akordů zazní později než tenhle
+      pos = -1 - later;   // nejpozdější akord je těsně u textu, dřívější o místo vlevo
       break;
     }
     if (t < first) { tgt = X; pos = X.words[0].pos; break; }   // do 0,4 s před prvním slovem → začátek řádku
