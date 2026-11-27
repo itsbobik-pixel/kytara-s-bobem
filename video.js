@@ -271,6 +271,75 @@ function setFormat(fmt, theme) {
   V.ctx = cv.getContext('2d');
   V.measure = new Map();
   V.rows = splitRows(V.TH.noChords ? V.baseRows.filter(r => !r.instr) : V.baseRows);
+  // mezihry = delší pauzy ve zpěvu (pro noty u stylů jen s textem)
+  V.gaps = [];
+  const R = V.rows;
+  R.forEach((r, i) => { const n = R[i + 1]; if (n && n.s - r.e > 4) V.gaps.push({ a: r.e, b: n.s }); });
+  if (R.length) V.gaps.push({ a: R[R.length - 1].e, b: V.dur + POST, end: true });
+}
+
+/** 0…1 – jak moc je teď mezihra (noty se objeví chvíli po posledním slově, zmizí před nástupem) */
+function gapAt(t) {
+  for (const g of V.gaps || []) {
+    if (t > g.a && t < g.b) return { g, o: clamp((t - g.a - 0.7) / 0.8) * (g.end ? 1 : clamp((g.b - LEAD - t) / 0.5)), k: Math.min(clamp((t - g.a - 0.7) / 0.8), g.end ? 1 : clamp((g.b - 2.7 - t) / 0.6)) };   // noty zmizí, než naskočí odpočet tečkami
+  }
+  return null;
+}
+
+/** nota: 0 = čtvrťová, 1 = osminová s praporkem, 2 = dvě osminy s trámcem */
+function note(ctx, x, y, s, type) {
+  const head = (hx, hy) => { ctx.beginPath(); ctx.ellipse(hx, hy, s * 0.34, s * 0.24, -0.4, 0, 6.283); ctx.fill(); };
+  const sx = x + s * 0.29, top = y - s * 1.25;
+  ctx.lineCap = 'round'; ctx.lineWidth = s * 0.09;
+  head(x, y);
+  ctx.beginPath(); ctx.moveTo(sx, y - s * 0.08); ctx.lineTo(sx, top); ctx.stroke();
+  if (type === 1) {
+    ctx.lineWidth = s * 0.1;
+    ctx.beginPath(); ctx.moveTo(sx, top); ctx.bezierCurveTo(sx + s * 0.1, top + s * 0.35, sx + s * 0.62, top + s * 0.4, sx + s * 0.42, top + s * 0.95); ctx.stroke();
+  } else if (type === 2) {
+    const x2 = x + s * 0.95, sx2 = x2 + s * 0.29, top2 = top - s * 0.15;
+    head(x2, y - s * 0.15);
+    ctx.beginPath(); ctx.moveTo(sx2, y - s * 0.23); ctx.lineTo(sx2, top2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx - s * 0.04, top); ctx.lineTo(sx2 + s * 0.04, top2); ctx.lineTo(sx2 + s * 0.04, top2 + s * 0.2); ctx.lineTo(sx - s * 0.04, top + s * 0.2); ctx.closePath(); ctx.fill();
+  }
+}
+
+/** mezihra: noty se pohupují do rytmu, pod nimi ubývá čas do dalšího zpěvu */
+function drawInterlude(ctx, T, t, alpha) {
+  const G = gapAt(t);
+  if (!G || G.k <= 0.01) return;
+  const { g, k } = G, L = V.L, TH = V.TH, sc = secColor(t);
+  const col = TH.wipe && TH.wipe.sung ? TH.wipe.sung(sc) : TH.ink;
+  const glow = TH.wipe && TH.wipe.glow ? TH.wipe.glow(sc) : sc;
+  const cy = TH.mode === 'karaoke' ? (L.land ? 470 : 1000) : L.cy;
+  const karaoke = TH.mode === 'karaoke';
+  const s = karaoke ? (L.land ? 62 : 58) : (L.land ? 50 : 48), n = L.land ? 7 : 5, span = L.land ? 820 : 640;
+  const pulse = chordPulse(t);
+  ctx.save();
+  ctx.globalAlpha = alpha * k;
+  ctx.fillStyle = col; ctx.strokeStyle = col;
+  if (TH.dark) { ctx.shadowColor = glow; ctx.shadowBlur = 22 + 18 * pulse; }
+  for (let i = 0; i < n; i++) {
+    const f = i / (n - 1);
+    const appear = clamp((k * 1.6 - f * 0.6));   // nastupují zleva doprava
+    if (appear <= 0) continue;
+    const x = L.W / 2 - span / 2 + f * span;
+    const y = cy + s * 0.5 + Math.sin(T * 2.4 - i * 0.85) * s * (karaoke ? 0.42 : 0.25) - easeOut(appear) * 14 + 14;
+    const sz = s * (0.9 + 0.12 * Math.sin(i * 2.1)) * (1 + 0.14 * pulse * (i % 2 ? 1 : 0.6)) * easeOut(appear);
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(Math.sin(T * 1.3 + i) * 0.12); ctx.translate(-x, -y);
+    note(ctx, x, y, sz, [1, 0, 2, 1, 0, 2, 1][i % 7]);
+    ctx.restore();
+  }
+  ctx.shadowBlur = 0;
+  if (!g.end && karaoke) {   // ubývající čárka do dalšího zpěvu (u posuvného textu stačí odpočet tečkami)
+    const p = clamp((g.b - t) / (g.b - g.a)), bw = L.land ? 420 : 360, by = cy + s * 1.6;
+    ctx.fillStyle = rgba(TH.dark ? '#ffffff' : '#000000', 0.15);
+    rr(ctx, L.W / 2 - bw / 2, by, bw, 6, 3); ctx.fill();
+    ctx.fillStyle = col;
+    rr(ctx, L.W / 2 - (bw * p) / 2, by, bw * p, 6, 3); ctx.fill();
+  }
+  ctx.restore();
 }
 
 const lyricFont = size => `${V.TH.lyric[0]} ${size}px ${V.TH.lyric[1]}`;
@@ -866,7 +935,13 @@ function drawLyrics(ctx, t, alpha) {
   const L = V.L, rows = V.rows;
   const i = rowAt(t);
   let scroll = -1;
-  if (i >= 0) scroll = i - 1 + ease((t - (rows[i].s - LEAD)) / 0.55);
+  if (i >= 0) {
+    // u stylů jen s textem se v mezihře řádky rozestoupí o půl řádku a uprostřed jsou noty
+    const gapAfter = j => V.TH.noChords && rows[j + 1] && rows[j + 1].s - rows[j].e > 4;
+    const prev = i > 0 && gapAfter(i - 1) ? 0.5 : 0;
+    scroll = i - 1 + prev + (1 - prev) * ease((t - (rows[i].s - LEAD)) / 0.55);
+    if (V.TH.noChords && (gapAfter(i) || i === rows.length - 1) && t > rows[i].e) scroll += 0.5 * ease(clamp((t - rows[i].e - 0.7) / 0.8));
+  }
   const ci = chordAt(t);
   const curChord = ci >= 0 ? V.chords[ci] : null;
   const sc = secColor(t);
@@ -875,7 +950,9 @@ function drawLyrics(ctx, t, alpha) {
     if (d < -2.3 || d > 3.6) continue;
     const a = alphaAt(d) * alpha;
     if (a <= 0.01) continue;
-    drawRow(ctx, rows[k], L.cy + slot(d), scaleAt(d), a, t, k === i, curChord, sc);
+    const G = V.TH.noChords ? gapAt(t) : null;
+    const open = G ? ease(G.o) * L.fs * 0.55 * Math.sign(d) : 0;   // místo pro noty a odpočet
+    drawRow(ctx, rows[k], L.cy + slot(d) + open, scaleAt(d), a, t, k === i, curChord, sc);
   }
   // odpočet před dalším řádkem po delší pauze
   const nx = rows[i + 1];
@@ -883,12 +960,15 @@ function drawLyrics(ctx, t, alpha) {
     const left = nx.s - t;
     if (left > 0 && left < 3.2 && (i < 0 || nx.s - rows[i].e > 3)) {
       const d = i + 1 - scroll;
-      const y = L.cy + slot(d) - L.fs * scaleAt(d) * 2.25;
+      const lite = V.TH.noChords && i >= 0;   // jen text: tečky uprostřed mezery po notách
+      const y = lite ? L.cy + (slot(d) + slot(d - 1)) / 2 : L.cy + slot(d) - L.fs * scaleAt(d) * 2.25;
       const x = L.align === 'left' ? L.left + 34 : L.cx;
+      const onCol = lite && V.TH.wipe.sung ? V.TH.wipe.sung(sc) : V.TH.dark ? mixHex(sc, '#ffffff', 0.3) : '#1D1A2F';
+      const R = lite ? 1.6 : 1, gapX = lite ? 52 : 34;
       for (let n = 0; n < 3; n++) {
         const on = left <= 3 - n;
-        ctx.fillStyle = on ? rgba(V.TH.dark ? mixHex(sc, '#ffffff', 0.3) : '#1D1A2F', alpha) : rgba(V.TH.dark ? '#ffffff' : '#1D1A2F', 0.18 * alpha);
-        ctx.beginPath(); ctx.arc(x + (n - 1) * 34, y, on ? 9 : 7, 0, 6.283); ctx.fill();
+        ctx.fillStyle = on ? rgba(onCol, alpha) : rgba(V.TH.dark ? '#ffffff' : '#1D1A2F', 0.18 * alpha);
+        ctx.beginPath(); ctx.arc(x + (n - 1) * gapX, y, (on ? 9 : 7) * R, 0, 6.283); ctx.fill();
       }
     }
   }
@@ -1436,7 +1516,10 @@ function draw(T) {
   const main = (1 - intro) * (1 - outro);
   drawCard(ctx, t, intro, false);
   drawCard(ctx, t, outro, true);
-  if (TH.mode === 'karaoke') drawKaraoke(ctx, t, main); else drawLyrics(ctx, t, main);
+  const gap = TH.noChords ? gapAt(t) : null;
+  const dim = gap ? 1 - gap.k * (TH.mode === 'karaoke' ? 0.35 : 0.45) : 1;
+  if (TH.mode === 'karaoke') drawKaraoke(ctx, t, main * dim); else drawLyrics(ctx, t, main * dim);
+  if (TH.noChords) drawInterlude(ctx, T, t, main);
   if (TH.letterbox) letterbox(ctx);
   if (!TH.noChords) drawHud(ctx, t, Math.max(0.35, 1 - outro));
   (TH.noChords ? drawTitleLite : drawTitle)(ctx, t, main * clamp((t + 0.6) / 0.6));
