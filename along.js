@@ -65,7 +65,7 @@ function setChordOff(v) {
   alTick(true);
 }
 const chordOffLabel = () => { const v = adminChordOff(); return v === 0 ? 'Akordy přesně' : `Akordy ${v > 0 ? 'dřív' : 'později'} ${String(Math.abs(v)).replace('.', ',')} s`; };
-const leadControl = () => h('div', { class: 'tgroup', title: 'Kdy se při hraní rozsvítí akord – uloží se k písničce, platí pro všechny (v továrně se ukazují přesné časy, efekt uvidíš po schování továrny)' },
+const leadControl = () => h('div', { class: 'tgroup', title: 'Kdy se při hraní rozsvítí akord – uloží se k písničce, platí pro všechny (text nahoře ukazuje akordy s předstihem, časová osa dole je přesná)' },
   h('button', { onclick: () => setChordOff(adminChordOff() - 0.1), title: 'později' }, '−'),
   h('span', { id: 'alOff-chords', class: 'al-lead' }, chordOffLabel()),
   h('button', { onclick: () => setChordOff(adminChordOff() + 0.1), title: 'dřív' }, '+'));
@@ -668,7 +668,7 @@ function alTick(force) {
   const ch = AL.model.chords;
   let ci = -1;
   alOff.chords = adminChordOff();
-  const tc = tReal + (AL.edit ? 0 : alOff.chords);   // akordy s předstihem
+  const tc = tReal + alOff.chords;   // akordy v textu s předstihem i v továrně (časová osa dole zůstává přesná)
   for (let i = 0; i < ch.length; i++) { if (ch[i].t <= tc) ci = i; else break; }
   if (ci !== AL.lastChord || force) {
     if (AL.nowChordEl) AL.nowChordEl.classList.remove('now');
