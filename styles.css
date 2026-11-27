@@ -764,7 +764,7 @@ a.tbtn { text-decoration: none; color: inherit; display: inline-flex; align-item
 }
 .al-yt[hidden] { display: none; }
 .al-yt iframe { width: 100%; height: 100%; display: block; }
-body.al-editing .al-yt { bottom: 236px; }
+body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad editorem časů (výšku nastavuje along.js) */
 .along .sheet-wrap { padding-bottom: max(45vh, 240px); }
 .al-err { color: var(--d0); font-weight: 600; }
 .al-ytpop { display: grid; gap: 8px; width: min(300px, calc(100vw - 52px)); }

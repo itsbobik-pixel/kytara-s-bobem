@@ -531,7 +531,14 @@ function renderAlongBody() {
   app.append(ed);
 
   renderAlongSheet(sheet);
-  if (AL.edit) renderTimeline();
+  if (AL.edit) {
+    renderTimeline();
+    // video (YouTube) drž nad editorem, ať nezakrývá jeho tlačítka – i když editor změní výšku
+    const tl = $('#alTl');
+    const setH = () => document.body.style.setProperty('--tl-h', (tl?.offsetHeight || 300) + 'px');
+    setH();
+    if (tl && window.ResizeObserver) new ResizeObserver(setH).observe(tl);
+  }
   AL.lastLine = -2;
   alTick(true);
   if (!AL.raf) AL.raf = requestAnimationFrame(alLoop);
