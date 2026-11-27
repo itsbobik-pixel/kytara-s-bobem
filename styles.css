@@ -893,3 +893,8 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .tl-chord.fac-next { outline: 3px solid var(--d0); outline-offset: 1px; z-index: 5; animation: facPulse 1s ease-in-out infinite; }
 @keyframes facPulse { 50% { outline-color: transparent; } }
 .fac-body .chord { position: static; display: inline-block; transform: none; font-size: 18px; }
+/* načítání zvuku: ekvalizér v barvách stupňů */
+.al-loader { display: flex; align-items: flex-end; justify-content: center; gap: 7px; height: 64px; margin: 8px auto 14px; }
+.al-loader i { width: 11px; height: 100%; border-radius: 6px; transform-origin: bottom; animation: alEq 1.1s ease-in-out infinite; animation-delay: calc(var(--i) * -0.17s); }
+@keyframes alEq { 0%, 100% { transform: scaleY(.22); } 35% { transform: scaleY(1); } 65% { transform: scaleY(.5); } }
+@media (prefers-reduced-motion: reduce) { .al-loader i { animation-duration: 3s; } }

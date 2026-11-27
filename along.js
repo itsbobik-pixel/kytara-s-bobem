@@ -496,7 +496,7 @@ function renderAlongBody() {
   const ed = h('div', { class: 'editor play along' + (AL.edit ? ' al-editing' : '') }, bar);
 
   if (AL.loading) {
-    ed.append(h('div', { class: 'empty' }, h('div', { class: 'big-emoji' }, '🎧'), h('h2', {}, 'Načítám zvuk…')));
+    ed.append(h('div', { class: 'empty' }, h('div', { class: 'al-loader', 'aria-hidden': 'true' }, ...[0, 1, 2, 3, 4, 5, 6].map(i => h('i', { style: `--i:${i};background:var(--d${i})` }))), h('h2', {}, 'Načítám zvuk…')));
     app.append(ed);
     return;
   }
