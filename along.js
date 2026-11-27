@@ -354,6 +354,7 @@ async function alLoad(song) {
   AL.sync = song.sync ? clone(song.sync) : null;
   AL.bufs = {}; AL.gains = {}; AL.env = null; AL.offset = 0; AL.playing = false; AL.undo = []; AL.redo = [];
   AL.error = ''; AL.hasStems = false; AL.loading = true; AL.view0 = 0; AL.engine = null;
+  if (typeof FAC !== 'undefined') Object.assign(FAC, { mode: null, start: null, taps: [], idx: -1 });   // továrna: nová písnička = čistý stav
   if (AL.yt) { try { AL.yt.pauseVideo(); } catch { /* nic */ } }
   renderAlongBody();
   try {
@@ -436,7 +437,9 @@ function renderAlong() {
   document.body.classList.add('playing');
   renderTopActions([h('a', { class: 'btn ghost', href: '#' }, '← Songy')]);
   if (AL.id !== song.id) { alongStop(); alLoad(song); return; }
-  if (!AL.sync && song.sync) AL.sync = clone(song.sync);
+  // song se mohl změnit v editoru akordů (posun akordu nese svůj čas v song.sync) → vzít čerstvou kopii,
+  // jinak by stará kopie časů akordy na nových pozicích neznala a další uložení by je přepsalo
+  if (song.sync && JSON.stringify(song.sync) !== JSON.stringify(AL.sync)) { AL.sync = clone(song.sync); AL.undo = []; AL.redo = []; }
   if (AL.sync) rebuild();   // vždy znovu: song se mohl změnit v editoru, nebo se změnilo kapo / transpozice
   if (AL.engine === 'yt') { const box = $('#alYtBox'); if (box) box.hidden = false; }
   renderAlongBody();
@@ -448,14 +451,15 @@ function renderAlongBody() {
   if (!song || !app) return;
   const editable = canEdit(song);
   if (!editable) AL.edit = false;
-  if (AL.factory && editable && AL.sync) AL.edit = true;   // továrna = vždy v editoru časů
+  AL.edit = !!(AL.factory && editable && AL.sync);   // časy se upravují jen v továrně
   const ready = alReady();
   document.body.classList.toggle('al-editing', AL.edit);
   app.innerHTML = '';
 
   const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const bar = h('div', { class: 'play-bar al-bar' },
-    h('a', { class: 'pb-back', href: '#play-' + song.id, title: 'Zpět na text' }, '←'),
+    AL.factory ? h('a', { class: 'pb-back', href: '#tovarna', title: 'Zpět na seznam továrny' }, '←')
+      : h('a', { class: 'pb-back', href: '#play-' + song.id, title: 'Zpět na text' }, '←'),
     h('div', { class: 'pb-name', title: (song.artist ? song.artist + ' – ' : '') + song.title },
       song.artist ? h('span', { class: 'pb-artist' }, song.artist + ' – ') : null,
       h('b', {}, song.title || 'Bez názvu')),
@@ -483,15 +487,14 @@ function renderAlongBody() {
         class: 'tbtn' + (AL.sync.yt ? ' on' : ''), title: AL.sync.yt ? 'YouTube video k songu – klik pro změnu' : 'Přidat YouTube video, ať play-along funguje všem',
         onclick: e => openYtPopover(e.currentTarget),
       }, '▶ YouTube') : null,
-      editable && AL.sync ? h('button', {
-        class: 'tbtn' + (AL.edit ? ' on' : ''), title: 'Doladit časy tažením na časové ose',
-        onclick: () => { AL.edit = !AL.edit; AL.view0 = Math.max(0, alNow() - AL.span * 0.25); renderAlongBody(); },
-      }, '✎ Doladit') : null,
+      editable && AL.sync && auth.admin && !AL.factory ? h('a', {
+        class: 'tbtn', href: '#tovarna-' + song.id, title: 'Továrna: časy, tempo a akordy na časové ose',
+      }, '🏭 Továrna') : null,
       editable && AL.sync ? h('a', {
         class: 'tbtn', href: (location.port === '5174' ? '' : 'http://127.0.0.1:5174/') + 'video.html#' + song.id, target: '_blank',
         title: 'Lyrics / play-along video (MP4 s vokálem i bez) – potřebuje pomocníka',
       }, '🎬 Video') : null,
-      AL.edit ? h('button', { id: 'alUndo', class: 'tbtn', onclick: alUndo, disabled: !AL.undo.length, title: 'Vrátit poslední posun (Ctrl+Z)' }, '↶ Zpět') : null));
+      null));
 
   const ed = h('div', { class: 'editor play along' + (AL.edit ? ' al-editing' : '') }, bar);
 
@@ -697,48 +700,29 @@ function alTick(force) {
   }
 }
 
-// ---------- časová osa (Doladit) ----------
+// ---------- časová osa (jen v továrně) ----------
 const TL = { ruler: 18, lanes: { line: [22, 26], word: [52, 30], chord: [88, 26] }, wave: [118, 56] };
 
 function renderTimelineShell() {
   return h('div', { class: 'al-tl', id: 'alTl' },
     h('div', { class: 'tl-tools' },
       h('div', { class: 'tgroup' },
-        h('button', { title: 'Smazat vybraný akord (Delete)', disabled: !AL.sel, onclick: () => tlDeleteChord() }, '🗑 Akord'),
-        h('button', { title: 'Zpět (Ctrl+Z)', disabled: !AL.undo.length, onclick: () => alUndo() }, '↶ Zpět'),
-        h('button', { title: 'Vrátit (Ctrl+Y)', disabled: !AL.redo?.length, onclick: () => alRedo() }, 'Vrátit ↷')),
+        h('button', { title: 'Zpět (Ctrl+Z)', disabled: !AL.undo.length, onclick: () => alUndo() }, '↶'),
+        h('button', { title: 'Vrátit (Ctrl+Y)', disabled: !AL.redo?.length, onclick: () => alRedo() }, '↷')),
       h('div', { class: 'tgroup tl-transport' },
         h('button', { title: 'Na začátek', onclick: () => alSeek(0) }, '⏮'),
-        h('button', { title: 'O 5 s zpět', onclick: () => alSeek(Math.max(0, alNow() - 5)) }, '−5 s'),
+        h('button', { title: 'O 5 s zpět', onclick: () => alSeek(Math.max(0, alNow() - 5)) }, '−5'),
         h('button', { title: 'Přehrát / pauza (mezerník)', id: 'tlPlay', onclick: () => alToggle() }, AL.playing ? '⏸' : '▶'),
         h('button', { title: 'Stop – zastavit a vrátit na začátek', onclick: () => { alPause(); alSeek(0); } }, '⏹'),
-        h('button', { title: 'O 5 s dál', onclick: () => alSeek(alNow() + 5) }, '+5 s')),
-      AL.factory && typeof factoryPanel === 'function'
-        ? factoryPanel(current())
-        : h('span', { class: 'tl-hint' }, 'Táhni akord, slovo nebo řádek (Shift = opačně než magnet). Vybraný akord: ←/→ posun. Klik do prázdna = skok.'),
-      AL.factory && (FAC.forceStage || AL.sync?.stage) === 'beats' ? null : h('div', { class: 'tgroup tl-snap' },
+        h('button', { title: 'O 5 s dál', onclick: () => alSeek(alNow() + 5) }, '+5')),
+      typeof factoryPanel === 'function' ? factoryPanel(current()) : null,
+      facMode() === 'beats' ? null : h('div', { class: 'tgroup tl-snap' },
         h('button', {
           class: tlSnapOn() ? 'on' : '',
           title: tlSnapOn() ? 'Přicvakávání na doby ZAPNUTÉ (tažení, šipky, ťukání). Klik = vypnout.' : 'Přicvakávání na doby VYPNUTÉ – volně, šipky po 0,05 s. Klik = zapnout.',
           onclick: () => { try { localStorage.setItem('ksb.along.snap', tlSnapOn() ? '0' : '1'); } catch { /* nic */ } renderAlongBody(); },
-        }, ico('magnet'), ' Na doby'),
-        h('button', { title: 'Všechny akordy přicvaknout na nejbližší dobu (jde vrátit ↶ Zpět)', disabled: !AL.sync?.beats?.length, onclick: () => snapAllChords() }, 'Všechny')),
-      AL.factory ? null : h('button', {
-        class: 'tbtn' + (AL.tap ? ' on' : ''), id: 'tlTap',
-        title: 'Ťukání: pusť písničku a při každé změně akordu zmáčkni J – nejbližší akord skočí na ten okamžik (na dobu)',
-        onclick: () => { AL.tap = !AL.tap; AL.tapped = new Set(); renderAlongBody(); },
-      }, AL.tap ? '⌨ Ťukání: J' : '⌨ Ťukat akordy'),
-      // ťukání prvních dob taktu → z nich se složí mřížka
-      AL.factory ? null : AL.barTaps
-        ? h('div', { class: 'tgroup tl-bartap' },
-            h('span', { class: 'al-lead', id: 'tlBarCount' }, `🥁 K = 1. doba (${AL.barTaps.length})`),
-            h('button', { title: 'Metrum', onclick: () => { AL.barMeter = AL.barMeter === 3 ? 4 : 3; renderAlongBody(); } }, (AL.barMeter || 4) + '/4'),
-            h('button', { title: 'Složit mřížku z ťuků', disabled: AL.barTaps.length < 2, onclick: () => applyBarTaps() }, '✓ Použít'),
-            h('button', { title: 'Zrušit ťukání', onclick: () => { AL.barTaps = null; renderAlongBody(); } }, '✕'))
-        : h('button', {
-            class: 'tbtn', title: 'Pusť písničku a na každou 1. dobu taktu zmáčkni K – mřížka dob se podle toho složí',
-            onclick: () => { AL.barTaps = []; AL.barMeter = AL.sync?.meter || 4; renderAlongBody(); },
-          }, '🥁 Ťukat 1. doby'),
+        }, ico('magnet')),
+        h('button', { title: 'Všechny akordy přicvaknout na nejbližší dobu (jde vrátit ↶). Vybraný akord smažeš klávesou Delete.', disabled: !AL.sync?.beats?.length, onclick: () => snapAllChords() }, 'Vše')),
       h('button', { class: 'tbtn', title: 'Oddálit', onclick: () => tlZoom(1.5) }, '−'),
       h('button', { class: 'tbtn', title: 'Přiblížit', onclick: () => tlZoom(1 / 1.5) }, '+')),
     // přehled celé písničky: kde je zobrazený úsek, klik/tažení = skok

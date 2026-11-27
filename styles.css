@@ -908,5 +908,8 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .tgroup button .ico, .fac-start .ico { vertical-align: -0.2em; }
 .fac-start span .ico .fl-cloth { fill: #fff; stroke: #fff; }
 .fac-start span .ico { color: #fff; }
-.al-tl .fac-tools .tgroup button { padding-left: 10px; padding-right: 10px; }
+.al-tl .tl-tools .tgroup button { padding-left: 8px; padding-right: 8px; }
 .al-tl .tl-tools:has(.fac-tools) { flex-wrap: wrap; }
+
+/* továrna: Akordy after – nápověda v liště editoru */
+.fac-after-hint { font-size: 13px; color: var(--muted); align-self: center; max-width: 340px; line-height: 1.3; }

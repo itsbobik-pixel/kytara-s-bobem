@@ -1,11 +1,11 @@
-// playalong.cz – „továrna“: průvodce zpracováním písničky po workeru (jen admin)
-//   krok 1 Tempo:  marker začátku + ťukání dob 1 2 3 4 (15–30 s) → mřížka dob pro celou píseň
-//   krok 2 Akordy: ťukání změn akordů → časy akordů (přicvaknuté na mřížku)
-//   krok 3 Vzhled: v editoru akordů posunout akordy na správné místo (čas se tím nemění)
-// Stav je v song.sync.stage: 'beats' → 'chords' → 'done'. Načítá se po along.js, před app.js.
+// playalong.cz – „továrna“: jediné místo, kde se ladí časy písničky po workeru (jen admin)
+//   všechno v jedné liště nad časovou osou:
+//   Akordy pre (normální editor) · praporek startu · ťukání: Doby (mřížka) / Akordy (časy akordů) · Akordy after
+//   Akordy after = editor, kde jde akordy jen posouvat v textu – časy se nemění.
+// song.sync.stage jen pro seznam: 'beats' (bez tempa) → 'chords' (tempo hotové) → 'done'. Načítá se po along.js, před app.js.
 
 const FAC = { taps: [], start: null, meter: 4, idx: 0, click: false, lastBeat: -1, ac: null };
-const STAGES = { beats: '1 · Tempo', chords: '2 · Akordy', done: 'hotovo' };
+const STAGES = { beats: 'bez tempa', chords: 'tempo ✓', done: 'hotovo' };
 const stageOf = s => (!s?.sync ? 'nosync' : s.sync.stage || 'done');
 
 // ---------- seznam ----------
@@ -15,7 +15,7 @@ function renderFactoryList() {
   document.body.classList.remove('playing');
   renderTopActions([h('a', { class: 'btn ghost', href: '#' }, '← Songy')]);
   const wrap = h('div', { class: 'wrap factory' }, h('h1', {}, '🏭 Továrna'),
-    h('p', { class: 'sub' }, 'Písničky po automatickém zpracování. Projdi u každé 3 kroky: tempo, akordy, vzhled.'));
+    h('p', { class: 'sub' }, 'Písničky po automatickém zpracování: start, tempo (ťukání dob), časy akordů, nakonec Akordy after.'));
   if (!auth.admin) { wrap.append(h('p', {}, 'Jen pro admina.')); app.append(wrap); return; }
   const order = { beats: 0, chords: 1, nosync: 2, done: 3 };
   const list = [...songs].sort((a, b) => (order[stageOf(a)] - order[stageOf(b)]) || (a.title || '').localeCompare(b.title || '', 'cs'));
@@ -44,28 +44,36 @@ function beatPeriod() {
 }
 function nearestBeatT(t) { return typeof nearestBeat === 'function' ? nearestBeat(t) : t; }
 
-/** tlačítka továrny – sedí přímo v liště editoru časů (jako ✎ Doladit, jen pár tlačítek navíc) */
+/** ťukání v továrně: 'beats' = doby (mřížka), 'chords' = změny akordů */
+function facMode() {
+  if (!AL.factory) return null;
+  return FAC.mode || (AL.sync?.stage === 'beats' || !AL.sync?.beats?.length ? 'beats' : 'chords');
+}
+function setFacMode(m) { FAC.mode = m; FAC.taps = []; FAC.idx = -1; renderAlongBody(); }
+
+/** tlačítka továrny – všechno v jedné liště nad časovou osou */
 function factoryPanel(song) {
-  const stage = FAC.forceStage || AL.sync?.stage || 'done';   // aktuální (rozpracovaný) stav
-  const step = (n, label, key) => h('button', {
-    class: stage === key ? 'on' : '', title: 'Krok ' + n + ': ' + label,
-    onclick: () => { FAC.forceStage = null; setStage(key); },
-  }, n);
-  const box = h('div', { class: 'fac-tools' },
-    h('div', { class: 'tgroup fac-steps' },
-      h('button', { title: 'Zpět na seznam továrny', onclick: () => { location.hash = '#tovarna'; } }, '←'),
-      step('1', 'Tempo', 'beats'), step('2', 'Akordy', 'chords'), step('3', 'Vzhled', 'done')));
-  if (stage === 'beats') box.append(...panelBeats());
-  else if (stage === 'chords') box.append(...panelChords());
-  else box.append(...panelLook(song));
-  return box;
+  const mode = facMode();
+  return h('div', { class: 'fac-tools' },
+    h('div', { class: 'tgroup' },
+      h('button', { title: 'Akordy pre: normální editor (akordy, text, části) – před ťukáním časů', onclick: () => { location.hash = '#pre-' + song.id; } }, 'Akordy pre')),
+    h('div', { class: 'tgroup' },
+      h('button', { title: 'Začátek písně = aktuální místo (praporek jde taky táhnout na ose)', onclick: () => setStart(alNow()) }, ico('flag'), ' ', h('span', { id: 'facStartT' }, fmtT(FAC.start ?? AL.sync?.start))),
+      h('button', { disabled: (FAC.start ?? AL.sync?.start) == null, title: 'Přehrát od startu (kousek před ním)', onclick: () => { alSeek(Math.max(0, (FAC.start ?? AL.sync.start) - 2)); if (!AL.playing) alPlay(); } }, '▶')),
+    h('div', { class: 'tgroup fac-mode', title: 'Co ťukáš klávesou K' },
+      h('button', { class: mode === 'beats' ? 'on' : '', onclick: () => setFacMode('beats') }, 'Doby'),
+      h('button', { class: mode === 'chords' ? 'on' : '', disabled: !AL.sync?.beats?.length, onclick: () => setFacMode('chords') }, 'Akordy')),
+    ...(mode === 'beats' ? panelBeats() : panelChords()),
+    h('div', { class: 'tgroup' },
+      h('button', { title: 'Akordy after: jen posunout akordy v textu, kam patří – časy se nemění', onclick: () => { location.hash = '#after-' + song.id; } }, 'Akordy after'),
+      h('button', { class: AL.sync?.stage === 'done' ? 'on' : '', title: 'Písnička je hotová (v seznamu továrny)', onclick: () => setStage('done') }, '✓ Hotovo')));
 }
 
 function setStage(stage) {
   AL.sync.stage = stage;
   commitSync();
-  FAC.taps = []; FAC.idx = -1;
   renderAlongBody();
+  if (stage === 'done') toast('Hotovo ✓');
 }
 
 const fmtT = s => s == null ? '–' : `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
@@ -74,9 +82,6 @@ function panelBeats() {
   if (FAC.start == null && AL.sync.start != null) FAC.start = AL.sync.start;
   FAC.meter = AL.sync.meter || 4;
   return [
-    h('div', { class: 'tgroup' },
-      h('button', { title: 'Začátek písně = aktuální místo (praporek jde taky táhnout na ose)', onclick: () => setStart(alNow()) }, ico('flag'), ' ', h('span', { id: 'facStartT' }, fmtT(FAC.start))),
-      h('button', { disabled: FAC.start == null, title: 'Přehrát od startu (kousek před ním)', onclick: () => { alSeek(Math.max(0, FAC.start - 2)); if (!AL.playing) alPlay(); } }, '▶')),
     h('button', {
       class: 'fac-tap', id: 'facCount',
       title: 'Klávesa K. Pusť a ťukej na každou dobu 1 2 3 4 – první ťuk = 1. doba taktu. Klidně celou písničku.',
@@ -84,7 +89,7 @@ function panelBeats() {
     }, `ŤUK · ${FAC.taps.length}`),
     h('div', { class: 'tgroup' },
       h('button', { title: 'Smazat ťuky a začít znovu', disabled: !FAC.taps.length, onclick: () => { FAC.taps = []; renderAlongBody(); } }, '✕'),
-      h('button', { class: 'fac-ok', id: 'facApply', title: 'Složit z ťuků mřížku dob a pokračovat na akordy', disabled: FAC.taps.length < 8, onclick: applyBeatTaps }, '✓ Použít')),
+      h('button', { class: 'fac-ok', id: 'facApply', title: 'Složit z ťuků mřížku dob', disabled: FAC.taps.length < 8, onclick: applyBeatTaps }, '✓ Použít')),
   ];
 }
 
@@ -100,7 +105,7 @@ function setStart(t) {
 function facTap() {
   const t = alNow();
   if (FAC.taps.length && t - FAC.taps[FAC.taps.length - 1] < 0.15) return;
-  if ((FAC.forceStage || AL.sync?.stage) === 'chords') { tapChord(t); return; }
+  if (facMode() === 'chords') { tapChord(t); return; }
   FAC.taps.push(t);
   const c = document.getElementById('facCount');
   if (c) c.textContent = `ŤUK · ${FAC.taps.length}`;
@@ -183,17 +188,17 @@ function applyBeatTaps() {
   AL.sync.meter = FAC.meter;
   AL.sync.bar0 = ((-g.firstK) % FAC.meter + FAC.meter) % FAC.meter;   // první ťuk = 1. doba taktu
   if (FAC.start != null) AL.sync.start = FAC.start;
-  AL.sync.stage = 'chords';
-  FAC.taps = []; FAC.forceStage = null; FAC.idx = -1;
+  if (AL.sync.stage === 'beats' || !AL.sync.stage) AL.sync.stage = 'chords';
+  FAC.taps = []; FAC.mode = 'chords'; FAC.idx = -1;
   commitSync();
   renderAlongBody();
   const bpm = Math.round(60 / g.P);
   toast(g.steady
-    ? `Pevné tempo ${bpm} BPM – ťuky sedí, mřížka až do konce ✓ Teď akordy.`
+    ? `Pevné tempo ${bpm} BPM – ťuky sedí, mřížka až do konce ✓ Teď ťukej akordy.`
     : `Tempo se hýbe (průměr ${bpm} BPM) – mřížka jde podle ťuků, za ${fmtT(g.tapEnd)} odhad. Pro jistotu ťukej až do konce.`);
 }
 
-// ---------- krok 2: akordy ----------
+// ---------- ťukání akordů ----------
 function chordSeq() { return AL.model.chords.filter(c => c.t != null || true); }
 function panelChords() {
   const seq = chordSeq();
@@ -215,7 +220,7 @@ function panelChords() {
       h('button', { title: 'Vrátit poslední ťuk', disabled: !FAC.idx, onclick: () => { alUndo(); FAC.idx = Math.max(0, FAC.idx - 1); renderAlongBody(); } }, '↶'),
       h('button', { title: 'Začít od prvního akordu po startu', onclick: () => { FAC.idx = -1; alSeek(Math.max(0, (AL.sync.start ?? 0) - 2)); renderAlongBody(); } }, '⏮'),
       h('button', { title: 'Další ťuk patří prvnímu akordu po tomhle místě', onclick: () => { const t = alNow(); FAC.idx = Math.max(0, seq.findIndex(c => (c.t ?? 0) >= t - 0.3)); renderAlongBody(); } }, '↪'),
-      h('button', { class: 'fac-ok', title: 'Akordy hotové – dál na vzhled', onclick: () => setStage('done') }, '✓ Hotovo')),
+    ),
   ];
 }
 
@@ -243,24 +248,14 @@ function tapChord(t) {
   renderTimeline();
 }
 
-// ---------- krok 3: vzhled ----------
-function panelLook(song) {
-  return [
-    h('div', { class: 'tgroup' },
-      h('button', { title: 'V editoru akordů posuň akordy tam, kde mají být v textu. Čas v Play Alongu se tím nezmění.', onclick: () => { location.hash = '#song-' + song.id; } }, '✎ Editor akordů'),
-      h('button', { title: 'Vyzkoušet hotový Play Along', onclick: () => { location.hash = '#along-' + song.id; } }, '▶ Play Along')),
-  ];
-}
-
 // ---------- na časové ose: marker startu, ťuky, další akord ----------
 function facIsNext(c) {
-  if ((FAC.forceStage || AL.sync?.stage) !== 'chords') return false;
+  if (facMode() !== 'chords') return false;
   const n = chordSeq()[FAC.idx];
   return !!n && n.li === c.li && n.pos === c.pos;
 }
 function factoryTimeline(items, g, W, H) {
-  const stage = FAC.forceStage || AL.sync?.stage;
-  if (stage === 'beats' && FAC.taps.length) {
+  if (facMode() === 'beats' && FAC.taps.length) {
     g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--d0') || '#e33';
     g.globalAlpha = 0.85;
     for (const t of FAC.taps) {

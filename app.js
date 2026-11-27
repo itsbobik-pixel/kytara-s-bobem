@@ -74,6 +74,7 @@ const auth = { mode: 'local', user: null, anon: false, admin: false, name: '', l
 const canEdit = s => auth.mode !== 'supabase' || (!!auth.user && (auth.admin || ((!s.owner || s.owner === auth.user.id) && !s.approved)));
 const canCreate = () => auth.mode !== 'supabase' || !!auth.user;
 const isPlay = s => route.mode === 'play' || !canEdit(s);
+const afterMode = () => route.view === 'song' && route.fac === 'after';   // Akordy after: jen posouvat akordy
 function needLogin(reason) {
   if (canCreate()) return false;
   window.KSB_SUPA.openLogin(reason);
@@ -518,6 +519,9 @@ function parseHash() {
   const m = /^#(song|play|along)-([A-Za-z0-9]+)$/.exec(location.hash);
   if (m && m[1] === 'along') return { view: 'along', id: m[2], mode: 'play' };
   if (m) return { view: 'song', id: m[2], mode: m[1] === 'play' ? 'play' : 'edit' };
+  // z továrny: Akordy pre (normální editor) / Akordy after (jen posun akordů, časy zůstanou)
+  const fe = /^#(pre|after)-([A-Za-z0-9]+)$/.exec(location.hash);
+  if (fe) return { view: 'song', id: fe[2], mode: 'edit', fac: fe[1] };
   if (location.hash === '#ucet') return { view: 'account' };
   if (location.hash === '#tovarna') return { view: 'factory' };
   const fm = /^#tovarna-([A-Za-z0-9]+)$/.exec(location.hash);
@@ -1215,11 +1219,12 @@ function renderEditor() {
   const scrollY = window.scrollY;
   app.innerHTML = '';
 
+  const fac = route.fac, after = afterMode();
   renderTopActions([
-    h('a', { class: 'btn ghost', href: '#' }, '← Songy'),
+    fac ? h('a', { class: 'btn ghost', href: '#tovarna-' + song.id }, '← Továrna') : h('a', { class: 'btn ghost', href: '#' }, '← Songy'),
   ]);
 
-  const ed = h('div', { class: 'editor ' + (play ? 'play' : 'edit') + (armed ? ' arming' : '') });
+  const ed = h('div', { class: 'editor ' + (play ? 'play' : 'edit') + (armed ? ' arming' : '') + (after ? ' fac-after' : '') });
 
   // hlavička
   const titleIn = h('input', { class: 'title-input', value: song.title, 'aria-label': 'Název', oninput: e => { song.title = e.target.value; touch(song); } });
@@ -1230,7 +1235,8 @@ function renderEditor() {
       class: 'capo-pill', title: play ? `Kapodastr na ${song.capo}. pražci` : 'Klikni pro odebrání kapodastru',
       onclick: () => { if (play) return; pushUndo(song); song.capo = 0; touch(song); renderEditor(); toast('Kapodastr odebrán', 'Zpět', undo); },
     }, `Kapo ${song.capo}`) : null,
-    !play && h('button', { class: 'btn', onclick: () => openAudioModal(song), title: 'Poznat tóninu z MP3 nebo YouTube' }, ico('headphones'), 'Z nahrávky'),
+    after && h('span', { class: 'fac-after-hint' }, 'Akordy after: táhni akordy, kam patří v textu – čas v Play Alongu se nemění.'),
+    !play && !after && h('button', { class: 'btn', onclick: () => openAudioModal(song), title: 'Poznat tóninu z MP3 nebo YouTube' }, ico('headphones'), 'Z nahrávky'),
     play && h('div', { class: 'tgroup', title: 'Transpozice – jen pro zobrazení, písnička se nemění' },
       h('button', { onclick: () => transpose(-1), 'aria-label': 'Transponovat dolů' }, '−'),
       h('button', {
@@ -1255,9 +1261,9 @@ function renderEditor() {
     !play && h('div', { class: 'tgroup history', title: 'Historie úprav' },
       h('button', { id: 'undoBtn', onclick: undo, title: 'Zpět (Ctrl+Z)', disabled: !undoStack.length }, '↶ Zpět'),
       h('button', { id: 'redoBtn', onclick: redo, title: 'Vrátit (Ctrl+Y)', disabled: !redoStack.length }, 'Vrátit ↷')),
-    !play && h('button', { class: 'btn', onclick: () => openSongModal(song) }, ico('pencil'), 'Text'),
-    !play && h('button', { class: 'btn', onclick: copyText, title: 'Zkopírovat jako text s akordy' }, ico('copy'), 'Kopírovat'),
-    !play && auth.mode === 'supabase' && h('button', {
+    !play && !after && h('button', { class: 'btn', onclick: () => openSongModal(song) }, ico('pencil'), 'Text'),
+    !play && !after && h('button', { class: 'btn', onclick: copyText, title: 'Zkopírovat jako text s akordy' }, ico('copy'), 'Kopírovat'),
+    !play && !fac && auth.mode === 'supabase' && h('button', {
       class: 'btn', title: 'Smazat song',
       onclick: () => {
         const idx = songs.indexOf(song);
@@ -1266,7 +1272,7 @@ function renderEditor() {
         toast(`„${song.title}“ smazán`, 'Zpět', () => { songs.splice(Math.min(idx, songs.length), 0, song); saveSongs(); go('#song-' + song.id); });
       },
     }, ico('trash'), 'Smazat'),
-    !play && auth.mode === 'supabase' && h('button', {
+    !play && !fac && auth.mode === 'supabase' && h('button', {
       class: 'btn', title: song.isPublic === false ? 'Teď ho vidíš jen ty. Klikni pro zveřejnění.' : 'Teď ho vidí všichni. Klikni a uvidíš ho jen ty.',
       onclick: () => {
         song.isPublic = song.isPublic === false;
@@ -1279,8 +1285,8 @@ function renderEditor() {
       ? (editable ? h('a', { class: 'btn primary', href: '#song-' + song.id }, '✎ Upravit') : null)
       : h('button', {
           class: 'btn rainbow', title: 'Uložit a přepnout na hraní',
-          onclick: () => { touch(song); saveSongs(true); go('#play-' + song.id); toast('Uloženo ✓'); },
-        }, ico('save'), 'Uložit'));
+          onclick: () => { touch(song); saveSongs(true); go((fac ? '#tovarna-' : '#play-') + song.id); toast('Uloženo ✓'); },
+        }, ico('save'), fac ? 'Uložit a zpět' : 'Uložit'));
 
   document.body.classList.toggle('playing', play);
   if (play) {
@@ -1304,13 +1310,13 @@ function renderEditor() {
   } else {
     ed.append(h('div', { class: 'song-head' },
       h('div', { class: 'titles' }, titleIn, artistIn,
-        h('button', { class: 'key-pill', title: 'Změnit tóninu (nabídku akordů)', onclick: e => openKeyPopover(e.currentTarget) },
+        h('button', { class: 'key-pill', title: 'Změnit tóninu (nabídku akordů)', disabled: after, onclick: e => openKeyPopover(e.currentTarget) },
           h('small', {}, 'Tónina'), keyName(song.key), h('small', {}, '/ ' + keyShort(relKey(song.key)))),
         song.author && auth.mode === 'supabase' ? h('div', { class: 'by' }, 'přidal(a) ', h('b', {}, song.author)) : null),
       controls));
   }
 
-  if (!play) ed.append(renderPalette(song));
+  if (!play && !after) ed.append(renderPalette(song));
   const sheet = h('div', { class: 'sheet' + (play && settings.cols !== false ? ' cols' : ''), id: 'sheet' });
   ed.append(h('div', { class: 'sheet-wrap' }, sheet));
   app.append(ed);
@@ -1447,7 +1453,7 @@ function renderSheet() {
   if (!song.lines.length) {
     sheet.append(h('p', { style: 'color:var(--muted)' }, 'Song je prázdný. Klikni na „✎ Text“ a vlož ho.'));
   }
-  if (!play) {
+  if (!play && !afterMode()) {
     sheet.append(h('button', {
       class: 'add-top', title: 'Vloží prázdný řádek na úplný začátek – pak na něj přetáhni Intro a akordy',
       onclick: () => { insertLine(0); toast('Řádek přidán nahoru – přetáhni na něj Intro a akordy'); },
@@ -1495,7 +1501,7 @@ function renderSheet() {
             startDrag(e, {
               kind: 'moveChord', li, pos: i, chord: { root: chord.root, q: chord.q, bass: chord.bass ?? null },
               label: chordName(chord, song.key), cls: degClass(chord.root, song.key), srcEl: ce,
-              onClick: () => openChordPopover(ce, li, i),
+              onClick: () => { if (!afterMode()) openChordPopover(ce, li, i); },
             });
           });
         }
@@ -1503,7 +1509,7 @@ function renderSheet() {
       }
       lineEl.append(span);
     }
-    if (!play) {
+    if (!play && !afterMode()) {
       lineEl.append(h('span', { class: 'line-tools', contenteditable: 'false' },
         h('button', { title: 'Kopírovat akordy celého řádku', onclick: () => copyChords(li, -Infinity, Infinity, 0) }, '⧉'),
         h('button', { title: 'Vložit zkopírované akordy do tohoto řádku', onclick: () => pasteChords(li, 0) }, '📋'),
@@ -1691,6 +1697,7 @@ function insertLine(at) {
   const song = current();
   pushUndo(song);
   song.lines.splice(at, 0, { text: '', chords: [], section: null });
+  if (song.sync?.lines) song.sync.lines.splice(at, 0, { w: [], c: [] });   // časy zůstanou u svých řádků
   touch(song); renderSheet();
 }
 function deleteLine(li) {
@@ -1698,6 +1705,7 @@ function deleteLine(li) {
   const song = current();
   pushUndo(song);
   const [removed] = song.lines.splice(li, 1);
+  if (song.sync?.lines) song.sync.lines.splice(li, 1);
   if (removed.section && song.lines[li] && !song.lines[li].section) song.lines[li].section = removed.section;
   touch(song); renderSheet();
   toast('Řádek smazán', 'Zpět', undo);
@@ -1941,6 +1949,7 @@ function onDragEnd() {
     if (t) placeChord(t.li, t.pos, p.chord);
   } else if (p.kind === 'moveChord') {
     if (t && t.li === p.li && t.pos === p.pos) { renderSheet(); return; }
+    if (!t && afterMode()) { renderSheet(); return; }   // after: akord se nedá smazat, jen posunout
     pushUndo(song);
     const src = song.lines[p.li];
     // čas akordu v play-alongu zůstane, jen se přesune s ním (posun v editoru je čistě vizuální)
@@ -2146,7 +2155,7 @@ document.addEventListener('keydown', e => {
     copyChords(r.li, r.from, r.to);
     return;
   }
-  if ((e.ctrlKey || e.metaKey) && !typing && editing && k === 'v' && (caret || selection)) {
+  if ((e.ctrlKey || e.metaKey) && !typing && editing && !afterMode() && k === 'v' && (caret || selection)) {
     e.preventDefault();
     const at = caret || { li: selRange().li, pos: selRange().from };
     pasteChords(at.li, at.pos);
