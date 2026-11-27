@@ -527,6 +527,9 @@ function parseHash() {
   if (location.hash === '#ucet') return { view: 'account' };
   if (location.hash === '#tovarna') return { view: 'factory' };
   if (location.hash === '#oblibene') return { view: 'list', fav: true };
+  if (location.hash === '#playlisty') return { view: 'playlists' };
+  const pl = /^#playlist-([0-9a-f-]{36})$/.exec(location.hash);
+  if (pl) return { view: 'list', pl: pl[1] };
   const fm = /^#tovarna-([A-Za-z0-9]+)$/.exec(location.hash);
   if (fm) return { view: 'along', id: fm[1], mode: 'play', factory: true };
   return { view: 'list' };
@@ -555,6 +558,115 @@ function toggleFav(id) {
   if (auth.mode === 'supabase' && auth.user && !auth.anon) window.KSB_SUPA.saveFavs?.([...f]);
   return f.has(id);
 }
+// ---------- playlisty ----------
+const plApi = () => window.KSB_SUPA;
+const hasAccount = () => auth.mode === 'supabase' && auth.user && !auth.anon;
+function playlistsToggle(on) {
+  return h('a', {
+    class: 'btn ghost pl-btn' + (on ? ' pl-on' : ''), href: on ? '#' : '#playlisty',
+    title: on ? 'Zpět na všechny songy' : 'Moje playlisty (pro přihlášené)',
+  }, h('span', { class: 'pl-ico' }, '♫'), ' Playlisty');
+}
+const songCount = n => n + (n === 1 ? ' písnička' : n >= 2 && n <= 4 ? ' písničky' : ' písniček');
+/** malý formulář na název playlistu (v okně) → zavolá done(name) */
+function askPlaylistName(title, value, done) {
+  closePopover();
+  const inp = h('input', { type: 'text', maxlength: 80, value: value || '', placeholder: 'např. Čtvrteční kruh' });
+  const close = () => $('#modalRoot').innerHTML = '';
+  const ok = () => { const v = inp.value.trim(); if (!v) { inp.focus(); return; } close(); done(v); };
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') close(); });
+  $('#modalRoot').innerHTML = '';
+  $('#modalRoot').append(h('div', { class: 'modal-back', onpointerdown: e => { if (e.target === e.currentTarget) close(); } },
+    h('div', { class: 'modal narrow pl-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+      h('h2', {}, title), h('label', { class: 'field' }, h('span', {}, 'Název'), inp),
+      h('div', { class: 'modal-actions' },
+        h('button', { class: 'btn ghost', onclick: close }, 'Zrušit'),
+        h('button', { class: 'btn primary', onclick: ok }, 'Uložit')))));
+  setTimeout(() => { inp.focus(); inp.select(); }, 0);
+}
+async function newPlaylist(songId) {
+  askPlaylistName('Nový playlist', '', async name => {
+    try {
+      await plApi().createPlaylist(name, songId ? [songId] : []);
+      toast(songId ? `Přidáno do nového playlistu „${name}“` : `Playlist „${name}“ je založený`);
+      render();
+    } catch (e) { console.warn(e); toast('Playlist se nepodařilo založit, zkus to znovu.'); }
+  });
+}
+async function togglePlaylistSong(p, songId) {
+  const has = p.songs.includes(songId);
+  const next = has ? p.songs.filter(x => x !== songId) : [...p.songs, songId];
+  try {
+    await plApi().updatePlaylist(p.id, { songs: next });
+    toast(has ? `Odebráno z „${p.name}“` : `Přidáno do „${p.name}“`);
+    if (route.pl === p.id) render();
+  } catch (e) { console.warn(e); toast('Nepovedlo se uložit playlist, zkus to znovu.'); }
+}
+/** ⋯ u písničky: zatím Přidat do playlistu (vybrat existující / založit nový) */
+function openSongMenu(anchor, s) {
+  if (!hasAccount()) {
+    openPopover(anchor, h('div', { class: 'account-menu song-menu' },
+      h('h5', {}, s.title || 'Písnička'),
+      h('div', { class: 'menu-list' },
+        h('button', { class: 'btn ghost', onclick: () => { closePopover(); window.KSB_SUPA?.openLogin('Playlisty si může vytvořit jen přihlášený.'); } }, '♫ Přidat do playlistu…'))));
+    return;
+  }
+  const list = plApi().playlists() || [];
+  const inPl = route.pl && list.find(p => p.id === route.pl);
+  openPopover(anchor, h('div', { class: 'account-menu song-menu' },
+    h('h5', {}, '♫ Přidat do playlistu'),
+    h('div', { class: 'menu-list' },
+      ...list.map(p => {
+        const has = p.songs.includes(s.id);
+        return h('button', {
+          class: 'btn ghost' + (has ? ' pl-has' : ''), title: has ? 'Už tam je – kliknutím odebrat' : 'Přidat do tohoto playlistu',
+          onclick: () => { closePopover(); togglePlaylistSong(p, s.id); },
+        }, h('span', { class: 'pl-check' }, has ? '✓' : ''), p.name);
+      }),
+      h('button', { class: 'btn ghost pl-new', onclick: () => newPlaylist(s.id) }, '+ Nový playlist…'),
+      inPl ? h('button', { class: 'btn ghost pl-remove', onclick: () => { closePopover(); togglePlaylistSong(inPl, s.id); } }, '× Odebrat z tohoto playlistu') : null)));
+}
+/** stránka #playlisty: přehled mých playlistů */
+function renderPlaylists() {
+  const app = $('#app');
+  app.innerHTML = '';
+  document.body.classList.remove('playing');
+  renderTopActions([favToggle(false), playlistsToggle(true), auth.admin ? factoryToggle(false) : null].filter(Boolean));
+  const wrap = h('div', { class: 'wrap' });
+  wrap.append(h('section', { class: 'hero' },
+    h('div', {}, h('h1', {}, 'Moje ', h('span', { class: 'hl' }, 'playlisty')),
+      h('p', {}, 'Seznamy písniček na hraní – třeba na kruh nebo k ohni. Písničku přidáš přes ⋯ v seznamu.')),
+    hasAccount() ? h('button', { class: 'btn rainbow big', onclick: () => newPlaylist() }, '+ Nový playlist') : null));
+  if (!hasAccount()) {
+    wrap.append(h('div', { class: 'empty' }, h('div', { class: 'big-emoji' }, '♫'), h('h2', {}, 'Playlisty jsou pro přihlášené'),
+      h('p', {}, 'Přihlas se a můžeš si skládat vlastní seznamy písniček.'),
+      h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => window.KSB_SUPA?.openLogin('Playlisty si může vytvořit jen přihlášený.') }, 'Přihlásit'),
+        h('a', { class: 'btn ghost', href: '#' }, '← Zpět na songy'))));
+    app.append(wrap);
+    return;
+  }
+  const list = plApi().playlists() || [];
+  if (!list.length) {
+    wrap.append(h('div', { class: 'empty' }, h('div', { class: 'big-emoji' }, '♫'), h('h2', {}, 'Zatím žádný playlist'),
+      h('p', {}, 'Založ první, nebo u písničky klikni na ⋯ → Přidat do playlistu.')));
+  } else {
+    const ul = h('ul', { class: 'song-list pl-list' });
+    list.forEach((p, i) => ul.append(h('li', { style: `--dot: var(${CARD_COLORS[i % CARD_COLORS.length]})` },
+      h('a', { class: 'song-link', href: '#playlist-' + p.id },
+        h('span', { class: 'dot' }), h('span', { class: 'sl-title' }, p.name), h('span', { class: 'sl-artist pl-count' }, ' · ' + songCount(p.songs.length))),
+      h('span', { class: 'sl-actions' },
+        h('button', { class: 'sl-link', title: 'Přejmenovat', onclick: () => askPlaylistName('Přejmenovat playlist', p.name, async name => {
+          try { await plApi().updatePlaylist(p.id, { name }); render(); } catch { toast('Nepovedlo se přejmenovat.'); }
+        }) }, '✎ Přejmenovat'),
+        h('button', { class: 'sl-link pl-del', title: 'Smazat playlist (písničky zůstanou ve zpěvníku)', onclick: async () => {
+          if (!confirm(`Smazat playlist „${p.name}“? Písničky ve zpěvníku zůstanou.`)) return;
+          try { await plApi().deletePlaylist(p.id); toast('Playlist smazán'); render(); } catch { toast('Nepovedlo se smazat.'); }
+        } }, '× Smazat')))));
+    wrap.append(ul);
+  }
+  app.append(wrap);
+}
+
 // tlačítko Oblíbené vedle Továrny: zapnuté = v seznamu jen oblíbené
 function favToggle(on) {
   return h('a', {
@@ -595,6 +707,7 @@ function render() {
   else if (route.view === 'factory') renderFactoryList();
   else if (route.view === 'song') renderEditor();
   else if (route.view === 'account') renderAccount();
+  else if (route.view === 'playlists') renderPlaylists();
   else renderLibrary();
 }
 
@@ -734,7 +847,9 @@ function renderLibrary() {
   document.body.classList.remove('playing');
   const shared = auth.mode === 'supabase';
   const favOnly = !!route.fav;
-  renderTopActions([favToggle(favOnly), auth.admin ? factoryToggle(false) : null].filter(Boolean));
+  const playlist = route.pl ? (window.KSB_SUPA?.playlists() || []).find(p => p.id === route.pl) : null;
+  if (route.pl && !playlist && !auth.loading) { go('#playlisty'); return; }
+  renderTopActions([favToggle(favOnly), playlistsToggle(!!route.pl), auth.admin ? factoryToggle(false) : null].filter(Boolean));
 
   const addSong = async () => {
     // přidat může i nepřihlášený: dostane anonymní účet, song čeká na schválení adminem
@@ -745,7 +860,11 @@ function renderLibrary() {
     openSongModal();
   };
   const wrap = h('div', { class: 'wrap' });
-  wrap.append(h('section', { class: 'hero' },
+  if (playlist) wrap.append(h('section', { class: 'hero' },
+    h('div', {}, h('a', { class: 'pl-back', href: '#playlisty' }, '← Playlisty'),
+      h('h1', {}, h('span', { class: 'hl' }, playlist.name)),
+      h('p', {}, songCount(playlist.songs.length) + ' · přidáš přes ⋯ u písničky ve zpěvníku'))));
+  else wrap.append(h('section', { class: 'hero' },
     h('div', {},
       shared
         ? h('h1', {}, 'Společný ', h('span', { class: 'hl' }, 'zpěvník'))
@@ -792,12 +911,12 @@ function renderLibrary() {
   function fillGrid() {
     grid.innerHTML = '';
     const q = searchQ.trim().toLowerCase();
-    const list = [...songs]
-      .sort((a, b) => cz.compare(a.artist || '', b.artist || '') || cz.compare(a.title || '', b.title || ''))
-      .filter(s => !hideUnready || isReady(s))
+    const list = (playlist ? playlist.songs.map(id => songs.find(s => s.id === id)).filter(Boolean) : [...songs]
+      .sort((a, b) => cz.compare(a.artist || '', b.artist || '') || cz.compare(a.title || '', b.title || '')))
+      .filter(s => playlist || !hideUnready || isReady(s))
       .filter(s => !favOnly || isFav(s.id))
       .filter(s => !q || (s.title + ' ' + (s.artist || '') + ' ' + (s.author || '')).toLowerCase().includes(q));
-    if (!list.length) grid.append(h('li', { class: 'none' }, favOnly && !q ? 'Zatím nemáš žádné oblíbené – klikni na ☆ u písničky.' : 'Nic nenalezeno.'));
+    if (!list.length) grid.append(h('li', { class: 'none' }, playlist && !q ? 'Playlist je zatím prázdný – ve zpěvníku klikni u písničky na ⋯ → Přidat do playlistu.' : favOnly && !q ? 'Zatím nemáš žádné oblíbené – klikni na ☆ u písničky.' : 'Nic nenalezeno.'));
     list.forEach((s, i) => {
       const color = CARD_COLORS[i % CARD_COLORS.length];
       const fav = isFav(s.id);
@@ -838,7 +957,11 @@ function renderLibrary() {
           }, '✓ Schválit') : null,
           s.hasSync !== false ? h('a', { class: 'sl-link sl-link-along', href: '#along-' + s.id, title: 'Hudba, text a akordy v rytmu' }, 'Play Along') : null,
           h('a', { class: 'sl-link sl-link-chords', href: '#play-' + s.id, title: 'Jen text s akordy' }, 'Akordy'),
-          s.hasSync !== false ? h('a', { class: 'sl-link sl-link-lyrics', href: '#lyrics-' + s.id, title: 'Jen text, který jede s videem – bez akordů' }, 'Moving Lyrics') : null)));
+          s.hasSync !== false ? h('a', { class: 'sl-link sl-link-lyrics', href: '#lyrics-' + s.id, title: 'Jen text, který jede s videem – bez akordů' }, 'Moving Lyrics') : null,
+          auth.mode === 'supabase' ? h('button', {
+            class: 'sl-more', title: 'Další možnosti', 'aria-label': 'Další možnosti', 'aria-haspopup': 'menu',
+            onclick: e => { e.stopPropagation(); openSongMenu(e.currentTarget, s); },
+          }, '⋯') : null)));
     });
   }
   fillGrid();

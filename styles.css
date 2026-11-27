@@ -957,3 +957,19 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .btn.ghost.fav-on { background: linear-gradient(135deg, #FFD54A, #F5A300); color: #3A2600; border-color: #F5A300; }
 .btn.ghost.fav-on .fav-ico { color: #fff; }
 @media (prefers-reduced-motion: reduce) { .sl-star.pop { animation: none; } }
+/* playlisty: tlačítko vedle Oblíbených, ⋯ u písničky, menu a přehled */
+.pl-btn .pl-ico { color: var(--d5); font-weight: 900; }
+.btn.ghost.pl-on { background: linear-gradient(135deg, var(--d5), var(--d3)); color: #fff; border-color: transparent; }
+.btn.ghost.pl-on .pl-ico { color: #fff; }
+.sl-more { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; cursor: pointer; font-size: 20px; font-weight: 900; line-height: 1; color: var(--muted); padding: 0; }
+.sl-more:hover, .sl-more:focus-visible { background: var(--surface-2); color: var(--ink); }
+.song-menu { min-width: 220px; }
+.song-menu .menu-list .btn { gap: 8px; }
+.song-menu .pl-check { width: 1em; color: var(--d3); font-weight: 900; }
+.song-menu .pl-new { color: var(--d5); font-weight: 800; }
+.song-menu .pl-remove { color: var(--d0); }
+.pl-list .pl-count { font-weight: 600; color: var(--muted); margin-left: 4px; white-space: pre; }
+.pl-list .sl-link { border: 0; background: none; cursor: pointer; font: inherit; }
+.pl-list .pl-del { color: var(--d0); }
+.pl-back { display: inline-block; margin-bottom: 6px; font-weight: 700; color: var(--muted); text-decoration: none; }
+.pl-back:hover { color: var(--ink); }

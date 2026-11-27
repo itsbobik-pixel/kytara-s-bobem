@@ -165,3 +165,20 @@ grant all on public.jobs to service_role;
 grant select, update on public.songs to service_role;
 grant insert on public.songs to service_role;
 grant select on public.admins to service_role;
+
+-- ---------- playlisty (28. 11. 2026): každý přihlášený (ne host) vidí a mění jen svoje ----------
+create table if not exists public.playlists (
+  id uuid primary key default gen_random_uuid(),
+  owner uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 80),
+  songs text[] not null default '{}' check (cardinality(songs) <= 500),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists playlists_owner_idx on public.playlists(owner);
+alter table public.playlists enable row level security;
+create policy playlists_own on public.playlists for all to authenticated
+  using (owner = (select auth.uid()) and not coalesce(((select auth.jwt())->>'is_anonymous')::boolean, false))
+  with check (owner = (select auth.uid()) and not coalesce(((select auth.jwt())->>'is_anonymous')::boolean, false));
+grant select, insert, update, delete on public.playlists to authenticated;
+create trigger playlists_touch before update on public.playlists for each row execute function public.touch_updated_at();

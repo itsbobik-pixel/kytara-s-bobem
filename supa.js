@@ -137,6 +137,8 @@ window.KSB_SUPA = (() => {
     // značení akordů: nastavení účtu; bez účtu vždy mezinárodní (B)
     settings.notation = (user && !auth.anon && user.user_metadata?.notation) || (user && !auth.anon ? settings.notation : 'intl');
     if (user && !auth.anon && typeof mergeFavs === 'function') mergeFavs(user.user_metadata?.favorites);
+    pls = null;
+    if (user && !auth.anon) await loadPlaylists();
     if (user) {
       const { data } = await sb.from('admins').select('user_id').eq('user_id', user.id).maybeSingle();
       auth.admin = !!data;
@@ -512,6 +514,34 @@ window.KSB_SUPA = (() => {
     setTimeout(() => { sb.auth.updateUser({ data: { notation: n } }).catch(() => { /* nic, zůstane aspoň v prohlížeči */ }); }, 0);
   }
 
+  // ---------- playlisty (jen přihlášený s účtem; každý vidí jen svoje – RLS) ----------
+  let pls = null;   // [{ id, name, songs: [songId…] }] nebo null (nepřihlášený / ještě nenačteno)
+  async function loadPlaylists() {
+    const { data, error } = await sb.from('playlists').select('id, name, songs').order('created_at', { ascending: true });
+    if (!error) pls = data.map(p => ({ id: p.id, name: p.name, songs: p.songs || [] }));
+    return pls;
+  }
+  async function createPlaylist(name, songIds = []) {
+    const { data, error } = await sb.from('playlists').insert({ name: name.slice(0, 80), songs: songIds }).select('id, name, songs').single();
+    if (error) throw error;
+    const p = { id: data.id, name: data.name, songs: data.songs || [] };
+    (pls ||= []).push(p);
+    return p;
+  }
+  async function updatePlaylist(id, fields) {
+    const p = pls?.find(x => x.id === id);
+    if (!p) throw new Error('playlist nenalezen');
+    const { error } = await sb.from('playlists').update(fields).eq('id', id);
+    if (error) throw error;
+    Object.assign(p, fields);
+    return p;
+  }
+  async function deletePlaylist(id) {
+    const { error } = await sb.from('playlists').delete().eq('id', id);
+    if (error) throw error;
+    pls = pls.filter(x => x.id !== id);
+  }
+
   /** oblíbené písničky do účtu (ať platí na všech zařízeních) */
   function saveFavs(list) {
     setTimeout(() => { sb.auth.updateUser({ data: { favorites: list } }).catch(() => { /* zůstanou aspoň v prohlížeči */ }); }, 0);
@@ -542,5 +572,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, saveFavs, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, saveFavs, playlists: () => pls, loadPlaylists, createPlaylist, updatePlaylist, deletePlaylist, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
 })();
