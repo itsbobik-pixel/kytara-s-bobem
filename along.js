@@ -644,13 +644,16 @@ function alTick(force) {
     for (const c of r.chars) {
       const w = c.w;
       const k = c.i - w.pos;
+      // přebarvení slova netrvá déle, než se slovo reálně zpívá (poslední slova řádku mají v datech
+      // konec protažený až přes držený tón / ticho → písmenka by „dojížděla“ ještě sekundy po zazpívání)
+      const wd = Math.min(w.e - w.s, 0.1 * w.len + 0.2);
       let on;
       if (mode === 'word') on = t >= w.s;
       else if (mode === 'syllable') {
         if (!w.syl) w.syl = sylStarts((song.lines[cur]?.text || '').slice(w.pos, w.pos + w.len));
         const si = w.syl.filter(st => st <= k).length - 1;
-        on = t >= w.s + (w.e - w.s) * (Math.max(0, si) / w.syl.length);
-      } else on = t >= w.s + (w.e - w.s) * (k / Math.max(1, w.len));
+        on = t >= w.s + wd * (Math.max(0, si) / w.syl.length);
+      } else on = t >= w.s + wd * (k / Math.max(1, w.len));
       c.el.classList.toggle('on', on);
     }
   }
