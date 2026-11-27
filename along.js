@@ -989,9 +989,9 @@ function tlDrag(e, el, kind, L, obj) {
   const x0 = e.clientX;
   const pps = tlWidth() / AL.span;
   let moved = false;
-  // co se posouvá spolu: u řádku i jeho slova a akordy (náhled)
+  // co se posouvá spolu: u řádku i jeho slova (akordy zůstávají na místě)
   const group = kind === 'line'
-    ? [...$('#tlItems').children].filter(it => it._L === L)
+    ? [...$('#tlItems').children].filter(it => it._L === L && !it.classList.contains('tl-chord'))
     : [el];
   group.forEach(it => { it._left0 = parseFloat(it.style.left); });
   try { el.setPointerCapture(e.pointerId); } catch { /* nic */ }
@@ -1246,11 +1246,9 @@ function shiftSync(kind, L, obj, d) {
     const w = sl.w[obj.k];
     if (!w) return;
     const len = w[3] - w[2];
-    w[2] = r3(Math.max(0, w[2] + d)); w[3] = r3(w[2] + len);
-    for (const c of sl.c) if (c[0] >= w[0] && c[0] < w[0] + Math.max(1, w[1])) c[1] = r3(Math.max(0, c[1] + d));
+    w[2] = r3(Math.max(0, w[2] + d)); w[3] = r3(w[2] + len);   // akordy zůstávají na svém čase
   } else {
-    for (const w of sl.w) { const len = w[3] - w[2]; w[2] = r3(Math.max(0, w[2] + d)); w[3] = r3(w[2] + len); }
-    for (const c of sl.c) c[1] = r3(Math.max(0, c[1] + d));
+    for (const w of sl.w) { const len = w[3] - w[2]; w[2] = r3(Math.max(0, w[2] + d)); w[3] = r3(w[2] + len); }   // jen text, akordy ne
   }
 }
 
