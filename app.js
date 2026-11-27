@@ -677,9 +677,11 @@ function renderLibrary() {
           h('span', { class: 'sl-title' }, s.title || 'Bez názvu'),
           s.isPublic === false ? h('span', { class: 'sl-lock', title: 'Vidíš jen ty' }, ' 🔒') : null,
           auth.mode === 'supabase' && s.approved === false ? h('span', { class: 'sl-pending', title: 'Ostatní ho uvidí, až ho admin schválí' }, 'čeká na schválení') : null,
-          auth.mode === 'supabase' && s.approved === false && window.KSB_SUPA?.jobFit(s.id) != null ? h('span', {
-            class: 'sl-pending', title: 'Kolik slov z textu se našlo v nahrávce (Play Along). Pod 85 % bývá jiná verze textu nebo videa.',
-          }, `Play Along ${window.KSB_SUPA.jobFit(s.id)} %`) : null,
+          auth.mode === 'supabase' && s.approved === false && window.KSB_SUPA?.jobFit(s.id) ? (f => h('span', {
+            class: 'sl-pending',
+            title: 'Play Along: text = kolik slov se našlo v nahrávce, akordy = kolik akordů opravdu zní v nahrávce. Pod ~85 % to chce zkontrolovat.'
+              + (f.shift ? ` Nahrávka byla o ${Math.abs(f.shift)} půltón${Math.abs(f.shift) > 1 ? 'y' : ''} ${f.shift > 0 ? 'výš' : 'níž'}, akordy jsou převedené do její tóniny.` : ''),
+          }, `text ${f.text} %` + (f.chords != null ? ` · akordy ${f.chords} %` : '')))(window.KSB_SUPA.jobFit(s.id)) : null,
           auth.mode === 'supabase' && window.KSB_SUPA?.jobStatus(s.id) ? h('span', { class: 'sl-pending', title: 'Pomocník počítá časy pro Play Along' }, '⏳ Play Along se připravuje') : null),
         h('span', { class: 'sl-actions' },
           auth.admin && s.approved === false ? h('button', {

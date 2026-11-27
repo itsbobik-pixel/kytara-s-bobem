@@ -284,11 +284,11 @@ def chord_items(lines, wsync, step=2.0):
     return items
 
 
-def snap_chords(items, beats, C, dur, EARLY=4.5, LATE=2.2, FREE=24.0, LAMBDA=0.35):
+def snap_chords(items, beats, C, dur, shift=0, EARLY=4.5, LATE=2.2, FREE=24.0, LAMBDA=0.35):
     types = {}
     for it in items:
         types.setdefault(it['key'], len(types))
-    tm = np.array([template(r, is_minor(q)) for r, q in types])
+    tm = np.array([template(r + shift, is_minor(q)) for r, q in types])   # shift = nahrávka vůči zápisu
     S = C @ tm.T
     cs = np.vstack([np.zeros((1, S.shape[1])), np.cumsum(S, 0)])
     fr = lambda t: int(min(len(S), max(0, round(t / HOP))))
@@ -348,6 +348,39 @@ def snap_chords(items, beats, C, dur, EARLY=4.5, LATE=2.2, FREE=24.0, LAMBDA=0.3
     return items
 
 
+def detect_shift(items, C, dur):
+    """o kolik půltónů je nahrávka výš/níž než zapsané akordy (−5…+6): každý akord v čase svého slova,
+    pro každý posun spočítá, kolik akordů opravdu zní (chord_fit) – mnohem spolehlivější než průměr přes celou píseň"""
+    timed = [dict(it, time=it['t']) for it in items if not it.get('free')] or [dict(it, time=it['t']) for it in items]
+    best = None
+    for sh in range(12):
+        fit = chord_fit(timed, C, dur, sh)[0] or 0
+        if best is None or fit > best[1]:
+            best = (sh, fit)
+    return (best[0] + 5) % 12 - 5, best[1]
+
+
+def chord_fit(items, C, dur, shift=0):
+    """kolik akordů (po přicvaknutí) opravdu zní: šablona akordu je mezi 3 nejlepšími z 24 durových/mollových"""
+    allt = np.array([template(r, m) for m in (False, True) for r in range(12)])
+    ok = n = 0
+    for k, it in enumerate(items):
+        t0 = it['time']
+        t1 = items[k + 1]['time'] if k + 1 < len(items) else min(dur, t0 + 2)
+        t1 = min(t1, t0 + 4)
+        a, b = int(t0 / HOP), int(t1 / HOP)
+        if b - a < 3 or b > len(C):
+            continue
+        prof = C[a:b].mean(0)
+        sc = allt @ prof
+        r, q = it['key']
+        idx = (r + shift) % 12 + (12 if is_minor(q) else 0)
+        rank = int((sc > sc[idx]).sum())
+        n += 1
+        ok += rank < 3
+    return (round(100 * ok / n) if n else None), n
+
+
 # ---------------------------------------------------------------- celé
 def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print):
     """words=None → přepis WhisperX (GPU). Jinak words = sync.lines[].w (test bez GPU)."""
@@ -379,7 +412,18 @@ def compute_sync(lines, vocals_path, inst_path, words=None, lang='cs', log=print
     items = chord_items(lines, words, step=2 * float(np.median(np.diff(beats))))   # bez textu: ~2 doby na akord
     if items:
         C = chroma(inst)
-        snap_chords(items, beats, C, dur)
+        shift, fit_words = detect_shift(items, C, dur)
+        snap_chords(items, beats, C, dur, shift=shift)
+        fit, n = chord_fit(items, C, dur, shift)
+        if fit is not None and fit < fit_words - 8:
+            # přicvaknutí na doby akordy zhoršilo (špatně odhadnuté tempo) → zpívané akordy zpět k jejich slovům
+            for it in items:
+                if not it.get('free'):
+                    it['time'] = round(float(it['t']), 3)
+            fit, n = chord_fit(items, C, dur, shift)
+            stats['snapReverted'] = True
+        stats.update(shift=shift, chordFit=fit, chordsChecked=n)
+        log('akordy: posun %+d půltónů, sedí %s %% z %d' % (shift, fit, n))
     csync = [[] for _ in lines]
     for it in items:
         csync[it['li']].append([it['pos'], it['time']])

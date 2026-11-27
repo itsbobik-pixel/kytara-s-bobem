@@ -151,7 +151,7 @@ window.KSB_SUPA = (() => {
     for (const j of data) {
       if (j.status === 'done') {
         const st = j.stats || {};
-        if (st.ours) fits.set(j.song_id, Math.round(100 * st.matched / st.ours));
+        if (st.ours) fits.set(j.song_id, { text: Math.round(100 * st.matched / st.ours), chords: st.chordFit ?? null, shift: st.shift || 0 });
       } else jobs.set(j.song_id, j.status);
     }
   }
