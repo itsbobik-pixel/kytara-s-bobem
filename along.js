@@ -1198,6 +1198,7 @@ function relocateChord(L, c, t) {
   const src = song.lines[L.li];
   if (!src || !src.text.trim()) return;
   if (c.pos < 0 && relocatePre(L, c, t, song, src)) return;   // akord před textem zůstává na svém řádku
+  if (c.pos >= src.text.length && relocatePost(L, c, t, song, src)) return;   // akord za textem taky
   // řádek s textem: zpívaný úsek řádku [první slovo, reálný konec posledního slova];
   // čas v pauze za koncem řádku patří PŘED text dalšího řádku (akord přichází před zpěvem)
   const textLines = AL.model.lines.filter(x => x.words.length && song.lines[x.li]?.text.trim());
@@ -1275,6 +1276,36 @@ function relocatePre(L, c, t, song, src) {
     }).sort((a, b) => a.t - b.t);
     pre.forEach((o, i) => { o.np = i - pre.length; });
     for (const o of pre) { o.x.pos = o.np; if (o.e) o.e[0] = o.np; }
+  }
+  src.chords.sort((a, b) => a.pos - b.pos);
+  if (AL.sel && AL.sel.li === L.li && AL.sel.pos !== undefined) AL.sel = { li: L.li, pos: chObj.pos };
+  return true;
+}
+
+/** akord za koncem textu při posunu v čase zůstává na svém řádku (nepřeskočí před další řádek):
+ *  po konci zpěvu řádku se akordy za textem jen seřadí podle času na svých místech;
+ *  když se posune do zpívané části, přesune se nad slovo téhož řádku. Před prvním slovem → běžné přesouvání. */
+function relocatePost(L, c, t, song, src) {
+  if (!L.words.length || t < L.words[0].s) return false;
+  const sl = AL.sync.lines[L.li] || (AL.sync.lines[L.li] = { w: [], c: [] });
+  const chObj = src.chords.find(x => x.pos === c.pos);
+  const entry = sl.c.find(x => x[0] === c.pos);
+  if (!chObj || !entry) return false;
+  for (const cc of L.chords) if (cc.t != null && !sl.c.some(x => x[0] === cc.pos)) sl.c.push([cc.pos, r3(cc.t)]);
+  const end = wordEnd(L.words[L.words.length - 1]);
+  if (t <= end) {   // do zpívané části → nad slovo, které se v tu chvíli zpívá
+    let pos = L.words[0].pos;
+    for (const w of L.words) if (w.s <= t + 0.03) pos = w.pos + Math.min(w.len - 1, Math.max(0, Math.round((t - w.s) / Math.max(0.05, wordEnd(w) - w.s) * w.len)));
+    const taken = new Set(src.chords.filter(x => x !== chObj).map(x => x.pos));
+    while (taken.has(pos)) pos++;
+    chObj.pos = pos; entry[0] = pos;
+  } else {   // zůstává za textem: místa za textem se nemění, akordy se na nich seřadí podle času
+    const post = src.chords.filter(x => x.pos >= src.text.length).map(x => {
+      const e = sl.c.find(y => y[0] === x.pos);
+      return { x, e, t: x === chObj ? t : (e ? e[1] : Infinity) };
+    });
+    const slots = post.map(o => o.x.pos).sort((a, b) => a - b);
+    post.sort((a, b) => a.t - b.t).forEach((o, i) => { o.x.pos = slots[i]; if (o.e) o.e[0] = slots[i]; });
   }
   src.chords.sort((a, b) => a.pos - b.pos);
   if (AL.sel && AL.sel.li === L.li && AL.sel.pos !== undefined) AL.sel = { li: L.li, pos: chObj.pos };
