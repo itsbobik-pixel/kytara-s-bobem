@@ -2050,6 +2050,32 @@ function paintSelection() {
   updateSelBar();
 }
 function clearSelection() { selection = null; caret = null; msel = null; paintSelection(); }
+/** Ctrl+A v editoru: označ všechny akordy písničky */
+function selectAllChords() {
+  const song = current();
+  selection = null; caret = null;
+  msel = new Set();
+  song.lines.forEach((l, li) => l.chords.forEach(c => msel.add(li + ':' + c.pos)));
+  if (!msel.size) msel = null;
+  paintSelection();
+}
+/** Delete / Backspace: smaž označené akordy (obdélník, Ctrl+A nebo úsek řádku) */
+function deleteSelectedChords() {
+  const song = current();
+  const r = selRange();
+  const keys = new Set(mselKeys().map(([li, pos]) => li + ':' + pos));
+  const hit = (li, c) => keys.has(li + ':' + c.pos) || (r && r.li === li && c.pos >= r.from && c.pos <= r.to);
+  const n = song.lines.reduce((s, l, li) => s + l.chords.filter(c => hit(li, c)).length, 0);
+  if (!n) return false;
+  pushUndo(song);
+  song.lines.forEach((l, li) => { l.chords = l.chords.filter(c => !hit(li, c)); });
+  selection = null; msel = null;
+  touch(song);
+  renderSheet();
+  paintSelection();
+  toast(`Smazáno akordů: ${n} (Ctrl+Z vrátí)`);
+  return true;
+}
 
 /** zkopíruj akordy z řádku li mezi pozicemi from–to; anchor = odkud se měří vzdálenost */
 function copyChords(li, from, to, anchor = from) {
@@ -2540,6 +2566,10 @@ document.addEventListener('keydown', e => {
   }
   const k = e.key.toLowerCase();
   const editing = route.view === 'song' && current() && !isPlay(current());
+  if ((e.ctrlKey || e.metaKey) && !typing && editing && !afterMode() && k === 'a') { e.preventDefault(); selectAllChords(); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && editing && !afterMode() && (msel?.size || selection)) {
+    e.preventDefault(); deleteSelectedChords(); return;
+  }
   if ((e.ctrlKey || e.metaKey) && !typing && editing && k === 'c' && msel?.size) { e.preventDefault(); copyMulti(); return; }
   if ((e.ctrlKey || e.metaKey) && !typing && editing && k === 'c' && selection) {
     e.preventDefault();
