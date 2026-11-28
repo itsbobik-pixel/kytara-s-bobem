@@ -495,7 +495,7 @@ window.KSB_SUPA = (() => {
     if (error) return;
     for (const r of data) { if (!reqs.has(r.song_id)) reqs.set(r.song_id, []); reqs.get(r.song_id).push(r); }
     if (auth.admin) {
-      const { data: sr } = await sb.from('song_requests').select('id, artist, title, yt, created_at').order('created_at', { ascending: true });
+      const { data: sr } = await sb.from('song_requests').select('id, artist, title, yt, created_at, notified_at').order('created_at', { ascending: true });
       songReqs = sr || [];
     }
   }

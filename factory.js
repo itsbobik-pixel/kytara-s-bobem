@@ -51,6 +51,7 @@ function renderFactoryList() {
       sl.append(h('li', {},
         h('span', { class: 'fac-name' }, r.artist + ' – ' + r.title),
         h('span', { class: 'sl-pending', title: 'Kdy přišla žádost' }, new Date(r.created_at).toLocaleDateString('cs-CZ')),
+        r.notified_at ? h('span', { class: 'sl-pending', title: 'Písnička je zveřejněná, žadateli odešel e-mail' }, '📧 posláno') : null,
         r.yt ? h('a', { class: 'fac-stage', href: 'https://youtu.be/' + r.yt, target: '_blank', rel: 'noopener', title: 'Odkaz od uživatele' }, '▶ YouTube') : null,
         h('button', { class: 'btn ghost', title: 'Smazat žádost (vyřízeno)', onclick: async () => {
           try { await window.KSB_SUPA.dismissSongRequest(r.id); renderFactoryList(); } catch { toast('Nepovedlo se smazat.'); }

@@ -259,3 +259,11 @@ grant select, insert (artist, title, yt), delete on public.song_requests to auth
 drop policy "songs: přidat jako já" on public.songs;
 create policy "songs: přidat jako já" on public.songs for insert to authenticated
   with check (owner = (select auth.uid()) and (select public.is_admin()));
+
+-- ---------- e-mail žadatelům, když je písnička zveřejněná (Resend přes pg_net, klíč ve Vaultu 'resend_api_key') ----------
+create extension if not exists pg_net;
+create extension if not exists unaccent with schema extensions;
+alter table public.song_requests add column if not exists song_id text references public.songs(id) on delete set null;
+alter table public.song_requests add column if not exists notified_at timestamptz;
+-- funkce public.norm_name(text), public.notify_song_requests() a trigger songs_notify_requests
+-- (after insert or update of approved, is_public on songs) – celé znění v migraci song_request_email
