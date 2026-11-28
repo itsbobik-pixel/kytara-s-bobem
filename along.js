@@ -132,6 +132,7 @@ function commitSync() {
   if (!canEdit(song)) return;
   song.sync = clone(AL.sync);
   touch(song);
+  if (AL.factory && typeof facMarkDirty === 'function') facMarkDirty();
 }
 const syncSnap = () => JSON.stringify({ sync: AL.sync, chords: (current()?.lines || []).map(l => l.chords) });
 function syncRestore(s) {

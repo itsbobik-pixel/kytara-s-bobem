@@ -259,12 +259,23 @@ window.KSB_SUPA = (() => {
         if (error) { failed = true; continue; }
         synced.delete(id); inDb.delete(id); editable.delete(id);
       }
+    } catch (e) {
+      failed = true; console.warn('Uložení selhalo', e);
     } finally {
       flushing = false;
       setStatus(failed ? '⚠ Něco se neuložilo, zkouším znovu' : '✓ Uloženo');
       if (failed) schedule(6000);
       if (again) { again = false; schedule(0); }
     }
+    return !failed;
+  }
+
+  /** uložit hned a počkat, až je to opravdu v databázi (tlačítko 💾 Uložit v továrně) */
+  async function saveNow() {
+    if (!auth.user) return false;
+    if (timer) { clearTimeout(timer); timer = 0; }
+    while (flushing) await new Promise(r => setTimeout(r, 100));
+    return flush();
   }
 
   // ---------- přihlášení / registrace (Google nebo e-mail + heslo) ----------
@@ -640,5 +651,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, setFav, topFavs: () => top, playlists: () => pls, loadPlaylists, createPlaylist, updatePlaylist, deletePlaylist, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, requestAlong, requests, requested, allRequests, dismissRequests, requestSong, songRequests: () => songReqs, dismissSongRequest, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, setFav, topFavs: () => top, playlists: () => pls, loadPlaylists, createPlaylist, updatePlaylist, deletePlaylist, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, requestAlong, requests, requested, allRequests, dismissRequests, requestSong, songRequests: () => songReqs, dismissSongRequest, importLocal, ensureLoaded, loadAll, approve, saveNow };
 })();

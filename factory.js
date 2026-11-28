@@ -121,15 +121,61 @@ function factoryPanel(song) {
     ...panelBeats(),
     ...(AL.sync?.beats?.length ? panelChords() : []),
     leadControl(),
-    h('div', { class: 'tgroup' },
-      h('button', { class: AL.sync?.stage === 'done' ? 'on' : '', title: 'Písnička je hotová (v seznamu továrny)', onclick: () => setStage('done') }, '✓ Hotovo')));
+    h('div', { class: 'tgroup' }, saveBtn(), approveBtn(song)));
 }
 
-function setStage(stage) {
-  AL.sync.stage = stage;
+// ---------- 💾 Uložit (= hotovo + uložit hned) a ✓ Schválit ----------
+const facSnap = () => JSON.stringify(AL.sync || null);
+function saveBtn() {
+  const saved = FAC.savedSnap != null && FAC.savedSnap === facSnap();
+  return h('button', {
+    id: 'facSave', class: saved ? 'fac-saved' : '',
+    title: 'Uložit písničku do databáze (a označit v továrně jako hotovou)', onclick: facSave,
+  }, saved ? '✓ Uloženo' : '💾 Uložit');
+}
+/** po každé změně časů tlačítko zase ukáže „Uložit“ (volá commitSync) */
+function facMarkDirty() {
+  const b = document.getElementById('facSave');
+  if (!b || FAC.saving || FAC.savedSnap === facSnap()) return;
+  b.className = ''; b.textContent = '💾 Uložit';
+}
+async function facSave() {
+  const b = document.getElementById('facSave');
+  FAC.saving = true;
+  if (b) { b.className = 'fac-saving'; b.textContent = '⏳ Ukládám…'; b.disabled = true; }
+  AL.sync.stage = 'done';
   commitSync();
-  renderAlongBody();
-  if (stage === 'done') toast('Hotovo ✓');
+  const ok = window.KSB_SUPA?.saveNow ? await window.KSB_SUPA.saveNow() : true;
+  FAC.saving = false;
+  FAC.savedSnap = ok ? facSnap() : null;
+  const b2 = document.getElementById('facSave');
+  if (b2) {
+    b2.disabled = false;
+    b2.className = ok ? 'fac-saved' : 'fac-err';
+    b2.textContent = ok ? '✓ Uloženo' : '⚠ Neuloženo – znovu';
+  }
+  toast(ok ? 'Uloženo ✓' : 'Uložení se nepovedlo, zkus to znovu.');
+}
+function approveBtn(song) {
+  if (!auth.admin || song.approved !== false) return null;
+  return h('button', {
+    class: 'fac-approve', title: 'Schválit – písnička se ukáže všem ve zpěvníku',
+    onclick: async e => {
+      const b = e.currentTarget;
+      b.disabled = true; b.textContent = '⏳ Schvaluju…';
+      try {
+        if (window.KSB_SUPA?.saveNow) await window.KSB_SUPA.saveNow();
+        await window.KSB_SUPA.approve(song.id);
+        song.approved = true;
+        b.textContent = '✓ Schváleno';
+        b.className = 'fac-saved';
+        toast(`„${song.title}“ je schválený ✓`);
+      } catch {
+        b.disabled = false; b.textContent = '✓ Schválit';
+        toast('Schválení se nepovedlo, zkus to znovu.');
+      }
+    },
+  }, '✓ Schválit');
 }
 
 const fmtT = s => s == null ? '–' : `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
