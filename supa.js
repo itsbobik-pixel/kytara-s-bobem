@@ -131,8 +131,8 @@ window.KSB_SUPA = (() => {
 
   async function loadUser(session) {
     const user = session?.user || null;
+    if (user?.id !== auth.user?.id) auth.admin = false;   // admin se nevynuluje, dokud se nezmění uživatel (žádné probliknutí)
     auth.user = user;
-    auth.admin = false;
     auth.anon = !!user?.is_anonymous;
     auth.name = user?.user_metadata?.name || (auth.anon ? 'Host' : '');
     // značení akordů: nastavení účtu; bez účtu vždy mezinárodní (B)
@@ -201,6 +201,8 @@ window.KSB_SUPA = (() => {
     sb.auth.onAuthStateChange((event, sess) => {
       if (event === 'PASSWORD_RECOVERY') { setTimeout(openNewPassword, 0); return; }
       if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'USER_UPDATED') return;
+      // Supabase posílá SIGNED_IN i při návratu na záložku (obnovení relace) – stejný uživatel = nic nepřekreslovat
+      if (event === 'SIGNED_IN' && sess?.user && sess.user.id === auth.user?.id) { auth.user = sess.user; return; }
       setTimeout(async () => {
         const before = auth.user?.id;
         await loadUser(sess);
