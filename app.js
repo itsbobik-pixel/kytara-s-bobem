@@ -356,7 +356,7 @@ function detectSection(line) {
   return null;
 }
 
-const PRE_MIN = -8;     // nejvýš 8 míst před začátkem textu
+const PRE_MIN = -16;    // nejvýš 16 míst před začátkem textu
 const PRE_SLOTS = 3;    // kolik volných míst před textem ukázat v editoru
 function normalizeChords(chords) {
   const out = [];
@@ -1789,7 +1789,7 @@ function renderSheet() {
     const byPos = new Map(line.chords.map(c => [c.pos, c]));
     // místa před textem: v editoru vždy pár volných, při hraní jen když tam akord je
     const minPos = line.chords.reduce((m, c) => Math.min(m, c.pos), 0);
-    const start = !play && line.text ? Math.min(-PRE_SLOTS, minPos) : minPos;
+    const start = !play && line.text ? Math.max(PRE_MIN, Math.min(-PRE_SLOTS, minPos - 1)) : minPos;   // v editoru vždy aspoň 1 volné místo navíc
     if (start < 0) lineEl.style.setProperty('--pre', String(-start));
     for (let i = start; i < len; i++) {
       const ch = i >= 0 && i < line.text.length ? line.text[i] : null;
