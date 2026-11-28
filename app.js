@@ -909,9 +909,10 @@ function renderLibrary() {
     id: 'songSearch', class: 'search', type: 'search', placeholder: 'Hledat song nebo interpreta…', value: searchQ,
     oninput: e => { searchQ = e.target.value; fillGrid(); },
   });
-  const side = h('aside', { id: 'libSide', class: 'lib-side', 'aria-label': 'Nově přidané a nejoblíbenější' });
-  wrap.append(h('div', { class: 'lib-tools' }, search),
-    favOnly || playlist ? grid : h('div', { class: 'lib-cols' }, grid, side));
+  const withSide = !favOnly && !playlist;
+  const wideSide = withSide && SIDE_MQ.matches;   // široká obrazovka = panel úplně na pravém okraji
+  const side = withSide ? h('aside', { id: 'libSide', class: 'lib-side' + (wideSide ? ' edge' : ''), 'aria-label': 'Nově přidané a nejoblíbenější' }) : null;
+  wrap.append(h('div', { class: 'lib-tools' }, search), withSide && !wideSide ? h('div', { class: 'lib-cols' }, grid, side) : grid);
 
   const cz = new Intl.Collator('cs', { sensitivity: 'base' });
   // admin má nehotové (neschválené / soukromé) songy jen v továrně
@@ -973,8 +974,24 @@ function renderLibrary() {
           }, '⋯') : null)));
     });
   }
-  app.append(wrap);
+  app.append(wideSide ? h('div', { class: 'lib-page' }, wrap, side) : wrap);
   fillGrid();
+}
+// panel se přesune (bok ↔ nad seznam), když se změní šířka okna
+const SIDE_MQ = matchMedia('(min-width: 1100px)');
+SIDE_MQ.addEventListener?.('change', () => { if (route.view === 'list' && !$('#modalRoot')?.children.length) render(); });
+
+// vlastní barevné ikonky panelu (odznak s přechodem + bílý symbol)
+const SIDE_ICONS = {
+  fresh: { g: ['#2ECC71', '#2D9CDB'], p: '<path d="M12 3.5l1.9 4.6 4.6 1.9-4.6 1.9L12 16.5l-1.9-4.6L5.5 10l4.6-1.9z" fill="#fff"/><path d="M18.2 14.6l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z" fill="#fff" opacity=".85"/><circle cx="6" cy="17.5" r="1.3" fill="#fff" opacity=".7"/>' },
+  top: { g: ['#FFB020', '#FF5A5F'], p: '<path d="M12.6 3.2c.4 2.6-1 4-2.3 5.4-1.4 1.5-2.6 3-2.6 5.3A4.3 4.3 0 0 0 12 18.4a4.3 4.3 0 0 0 4.3-4.5c0-1.4-.5-2.5-1.2-3.4-.2 1-.8 1.8-1.6 2.2.5-3.2-.3-6.6-.9-9.5z" fill="#fff"/><path d="M12 18.4a2.2 2.2 0 0 1-2.2-2.3c0-1.3 1.1-2 1.7-3.1.9 1.2 2.7 2 2.7 3.2a2.2 2.2 0 0 1-2.2 2.2z" fill="#FF8A3D"/>' },
+};
+function sideIcon(name) {
+  const d = SIDE_ICONS[name], id = 'sg-' + name;
+  const s = document.createElement('span');
+  s.className = 'ls-ico';
+  s.innerHTML = `<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${d.g[0]}"/><stop offset="1" stop-color="${d.g[1]}"/></linearGradient></defs><rect width="24" height="24" rx="8" fill="url(#${id})"/>${d.p}</svg>`;
+  return s;
 }
 
 /** panel vpravo vedle seznamu: Nově přidané + Nejoblíbenější (při hledání se schová) */
@@ -982,7 +999,7 @@ function renderSidePanel() {
   const side = document.getElementById('libSide');
   if (!side) return;
   side.innerHTML = '';
-  side.hidden = !!searchQ.trim();
+  side.hidden = !!searchQ.trim() && !side.classList.contains('edge');   // na boku zůstává i při hledání
   if (side.hidden) return;
   const ready = songs.filter(s => isReady(s));
   const item = (s, extra) => h('li', {},
@@ -990,16 +1007,16 @@ function renderSidePanel() {
       h('span', { class: 'ls-title' }, s.title || 'Bez názvu'),
       s.artist ? h('span', { class: 'ls-artist' }, s.artist) : null),
     extra || null);
-  const card = (cls, title, items, empty) => h('section', { class: 'ls-card ' + cls },
-    h('h3', {}, title),
+  const card = (cls, icon, title, items, empty) => h('section', { class: 'ls-card ' + cls },
+    h('h3', {}, sideIcon(icon), h('span', {}, title)),
     items.length ? h('ol', {}, ...items) : h('p', { class: 'ls-empty' }, empty));
 
   const fresh = ready.filter(s => s.created).sort((a, b) => b.created - a.created).slice(0, 6);
   const top = (window.KSB_SUPA?.topFavs?.() || [])
     .map(t => ({ s: ready.find(x => x.id === t.song_id), n: Number(t.n) })).filter(t => t.s).slice(0, 6);
   side.append(
-    card('ls-new', '🆕 Nově přidané', fresh.map(s => item(s)), 'Zatím nic nového.'),
-    card('ls-top', '🔥 Nejoblíbenější', top.map(t => item(t.s, h('span', { class: 'ls-n', title: 'Kolik lidí ji má v oblíbených' }, '★ ' + t.n))),
+    card('ls-new', 'fresh', 'Nově přidané', fresh.map(s => item(s)), 'Zatím nic nového.'),
+    card('ls-top', 'top', 'Nejoblíbenější', top.map(t => item(t.s, h('span', { class: 'ls-n', title: 'Kolik lidí ji má v oblíbených' }, '★ ' + t.n))),
       'Zatím nikdo nic neoznačil – dej písničce ☆ a bude tady.'));
 }
 

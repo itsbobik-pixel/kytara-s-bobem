@@ -1015,3 +1015,18 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 }
 .seo-fallback { padding-top: 40px; color: var(--muted); }
 .seo-fallback h1 { color: var(--ink); }
+/* panel úplně na pravém okraji (široká obrazovka) + vlastní ikonky */
+.lib-page { display: grid; grid-template-columns: minmax(0, 1fr) 300px; align-items: start; }
+.lib-page > .wrap { width: 100%; }
+.lib-side.edge { position: sticky; top: 66px; height: calc(100vh - 66px); overflow-y: auto; gap: 0; padding: 26px 18px 30px; background: var(--surface); border-left: 1px solid var(--line); }
+.lib-side.edge .ls-card { background: none; border: 0; box-shadow: none; border-radius: 0; padding: 0 0 22px; }
+.lib-side.edge .ls-card + .ls-card { border-top: 1px solid var(--line); padding-top: 20px; }
+.ls-card h3 { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.ls-ico { display: inline-flex; flex: none; filter: drop-shadow(0 3px 6px rgba(0,0,0,.12)); }
+.ls-ico svg { display: block; }
+.ls-new, .ls-top { border-top-width: 0; }
+.lib-side:not(.edge) .ls-new { border-top: 4px solid var(--d3); }
+.lib-side:not(.edge) .ls-top { border-top: 4px solid var(--d0); }
+.lib-side.edge .ls-card a { padding: 8px 4px; border-radius: 10px; }
+.lib-side.edge .ls-card li:hover { background: var(--surface-2); border-radius: 10px; }
+.lib-side.edge .ls-card li { padding: 0 4px; }
