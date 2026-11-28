@@ -2162,6 +2162,7 @@ function bestCapo(song) {
 }
 /** nabídka víc variant kapodastru */
 function openCapoPicker(anchor) {
+  if (popJustClosed === anchor) { popJustClosed = null; return; }   // druhé kliknutí na Kapo = zavřít
   const song = current();
   const opts = capoOptions(song).filter(o => o.capo !== 0 && o.easy >= 0.35).slice(0, 4);   // jen varianty, které opravdu pomůžou
   if (!opts.some(o => o.capo === 0)) opts.push(capoOptions(song).find(o => o.capo === 0));
@@ -2432,6 +2433,7 @@ function openPopover(anchor, content) {
   pop.innerHTML = '';
   pop.append(content);
   pop.hidden = false;
+  pop._anchor = anchor;
   const r = anchor.getBoundingClientRect();
   const pw = pop.offsetWidth, ph = pop.offsetHeight;
   let left = Math.min(Math.max(12, r.left), innerWidth - pw - 12);
@@ -2440,9 +2442,11 @@ function openPopover(anchor, content) {
   pop.style.left = left + 'px';
   pop.style.top = top + 'px';
 }
-function closePopover() { const p = $('#popover'); if (p) { p.hidden = true; p.innerHTML = ''; } }
+function closePopover() { const p = $('#popover'); if (p) { p.hidden = true; p.innerHTML = ''; p._anchor = null; } }
+let popJustClosed = null;   // tlačítko, na které se kliklo, když jeho nabídka byla otevřená (klik ji jen zavře)
 document.addEventListener('pointerdown', e => {
   const p = $('#popover');
+  popJustClosed = !p.hidden && p._anchor && p._anchor.contains(e.target) ? p._anchor : null;
   if (!p.hidden && !p.contains(e.target) && !e.target.closest('.chord, .sec-label, .key-pill, .chip.add, .capo-btn')) closePopover();
 });
 

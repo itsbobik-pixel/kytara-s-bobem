@@ -119,7 +119,7 @@ function prepare(song) {
     chords.push(o);
   });
   const dur = Math.max(song.sync.dur || 0, (chords[chords.length - 1]?.t || 0) + 2);
-  chords.forEach((c, i) => { c.end = i + 1 < chords.length ? chords[i + 1].t : dur; c.i = i; });
+  chords.forEach((c, i) => { c.end = i + 1 < chords.length ? chords[i + 1].t : (song.sync.lastLen > 0 ? Math.min(dur, c.t + song.sync.lastLen) : dur); c.i = i; });
   const secEv = [];
   rows.forEach(r => { if (r.secStart || !secEv.length) secEv.push({ t: r.s - LEAD, sec: r.sec, label: r.label, color: SEC[r.sec] || SEC.verse }); });
   Object.assign(V, { song, chords, secEv, dur, total: PRE + dur + POST, baseRows: rows });

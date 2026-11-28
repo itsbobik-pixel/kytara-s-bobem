@@ -840,7 +840,7 @@ function renderTimeline() {
   for (let i = 0; i < allCh.length; i++) {
     const c = allCh[i];
     if (c.t == null) continue;
-    const next = allCh[i + 1]?.t ?? c.t + 2;
+    const next = allCh[i + 1]?.t ?? c.t + lastChordLen();
     if (next < t0 || c.t > t1) continue;
     const L = AL.model.lines.find(x => x.li === c.li);
     const el = tlItem('chord', L, c, tlX(c.t), Math.max(18, tlX(next) - tlX(c.t) - 2), chordName(c.ch, song.key));
@@ -849,7 +849,7 @@ function renderTimeline() {
     if (AL.factory && typeof facIsNext === 'function' && facIsNext(c)) el.classList.add('fac-next');
     // úchyty: levý = začátek akordu, pravý = konec (= začátek dalšího akordu)
     const nx = allCh[i + 1]?.t != null ? allCh[i + 1] : null;
-    for (const side of nx ? ['l', 'r'] : ['l']) {
+    for (const side of ['l', 'r']) {   // i poslední akord jde zkrátit (délka v sync.lastLen)
       const gr = h('div', { class: 'tl-grip tl-grip-' + side, title: side === 'r' ? 'Táhni = konec akordu (začátek dalšího)' : 'Táhni = začátek akordu' });
       gr.addEventListener('pointerdown', e => tlChordResize(e, el, L, c, side, allCh[i - 1], nx));
       el.append(gr);
@@ -955,14 +955,18 @@ function tlResize(e, el, L, w, side) {
   el.addEventListener('pointercancel', up);
 }
 
+/** délka posledního akordu (bez dalšího akordu není konec dán) */
+const lastChordLen = () => (AL.sync?.lastLen > 0 ? AL.sync.lastLen : 2);
+
 /** natažení / zkrácení akordu za okraj: levý posune jeho začátek, pravý začátek dalšího akordu (konec se nemění / začátek ano) */
 function tlChordResize(e, el, L, c, side, prev, next) {
   e.preventDefault();
   e.stopPropagation();
   const x0 = e.clientX, pps = tlWidth() / AL.span;
   const left0 = parseFloat(el.style.left), width0 = parseFloat(el.style.width);
+  const lastEnd = side === 'r' && !next;   // pravý okraj posledního akordu = jeho délka
   const mv = side === 'l' ? c : next;   // akord, jehož čas se mění
-  const t0 = mv.t;
+  const t0 = lastEnd ? c.t + lastChordLen() : mv.t;
   const lo = (side === 'l' ? prev?.t ?? 0 : c.t) + 0.05;
   const hi = (side === 'l' ? next?.t ?? t0 + 30 : next === null ? t0 + 30 : (AL.model.chords[AL.model.chords.indexOf(next) + 1]?.t ?? t0 + 30)) - 0.05;
   let d = 0;
@@ -970,7 +974,7 @@ function tlChordResize(e, el, L, c, side, prev, next) {
   el.classList.add('dragging');
   const calc = ev => {
     let t = t0 + (ev.clientX - x0) / pps;
-    if (ev.shiftKey !== tlSnapOn() && AL.sync?.beats?.length) t = nearestBeat(t);
+    if (ev.shiftKey !== tlSnapOn() && AL.sync?.beats?.length) { const b = nearestBeat(t); if (b >= lo && b <= hi && Math.abs(b - t) < 0.5) t = b; }   // za poslední dobou (konec písně) bez přicvaknutí
     return Math.min(hi, Math.max(lo, t)) - t0;
   };
   const move = ev => {
@@ -986,6 +990,13 @@ function tlChordResize(e, el, L, c, side, prev, next) {
     el.classList.remove('dragging');
     d = calc(ev);
     if (Math.abs(d) < 0.01) return;
+    if (lastEnd) {
+      pushSyncUndo();
+      AL.sync.lastLen = r3(t0 + d - c.t);
+      commitSync();
+      renderAlongBody();
+      return;
+    }
     const ML = AL.model.lines.find(x => x.li === mv.li) || L;
     pushSyncUndo();
     shiftSync('chord', ML, mv, d);
