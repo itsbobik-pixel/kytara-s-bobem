@@ -494,6 +494,22 @@ window.KSB_SUPA = (() => {
     const { data, error } = await sb.from('along_requests').select('song_id, user_id, yt, created_at').order('created_at', { ascending: true });
     if (error) return;
     for (const r of data) { if (!reqs.has(r.song_id)) reqs.set(r.song_id, []); reqs.get(r.song_id).push(r); }
+    if (auth.admin) {
+      const { data: sr } = await sb.from('song_requests').select('id, artist, title, yt, created_at').order('created_at', { ascending: true });
+      songReqs = sr || [];
+    }
+  }
+  // ---------- žádosti o novou písničku (admin je vidí v továrně) ----------
+  let songReqs = [];
+  async function requestSong(artist, title, ytId) {
+    if (!auth.user || auth.anon) throw new Error('login');
+    const { error } = await sb.from('song_requests').insert({ artist, title, yt: ytId || null });
+    if (error) throw error;
+  }
+  async function dismissSongRequest(id) {
+    const { error } = await sb.from('song_requests').delete().eq('id', id);
+    if (error) throw error;
+    songReqs = songReqs.filter(r => r.id !== id);
   }
   const requests = id => reqs.get(id) || [];
   const requested = id => !!auth.user && requests(id).some(r => r.user_id === auth.user.id);
@@ -624,5 +640,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, setFav, topFavs: () => top, playlists: () => pls, loadPlaylists, createPlaylist, updatePlaylist, deletePlaylist, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, requestAlong, requests, requested, allRequests, dismissRequests, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, setFav, topFavs: () => top, playlists: () => pls, loadPlaylists, createPlaylist, updatePlaylist, deletePlaylist, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, requestAlong, requests, requested, allRequests, dismissRequests, requestSong, songRequests: () => songReqs, dismissSongRequest, importLocal, ensureLoaded, loadAll, approve };
 })();

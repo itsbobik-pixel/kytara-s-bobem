@@ -43,6 +43,22 @@ function renderFactoryList() {
     }
     wrap.append(h('h2', {}, '🙋 Žádosti o Play Along'), rl, h('h2', {}, 'Rozpracované'));
   }
+  // žádosti o nové písničky
+  const sreqs = window.KSB_SUPA?.songRequests?.() || [];
+  if (sreqs.length) {
+    const sl = h('ul', { class: 'fac-list fac-reqs' });
+    for (const r of sreqs) {
+      sl.append(h('li', {},
+        h('span', { class: 'fac-name' }, r.artist + ' – ' + r.title),
+        h('span', { class: 'sl-pending', title: 'Kdy přišla žádost' }, new Date(r.created_at).toLocaleDateString('cs-CZ')),
+        r.yt ? h('a', { class: 'fac-stage', href: 'https://youtu.be/' + r.yt, target: '_blank', rel: 'noopener', title: 'Odkaz od uživatele' }, '▶ YouTube') : null,
+        h('button', { class: 'btn ghost', title: 'Smazat žádost (vyřízeno)', onclick: async () => {
+          try { await window.KSB_SUPA.dismissSongRequest(r.id); renderFactoryList(); } catch { toast('Nepovedlo se smazat.'); }
+        } }, '✕')));
+    }
+    wrap.append(h('h2', {}, '🎵 Žádosti o písničky'), sl);
+    if (!reqs.length) wrap.append(h('h2', {}, 'Rozpracované'));
+  }
   const ul = h('ul', { class: 'fac-list' });
   if (!list.length) ul.append(h('li', {}, h('span', { class: 'fac-name' }, 'Všechno je hotové 🎉')));
   for (const s of list) {

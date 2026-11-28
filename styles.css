@@ -1030,3 +1030,6 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .lib-side.edge .ls-card a { padding: 8px 4px; border-radius: 10px; }
 .lib-side.edge .ls-card li:hover { background: var(--surface-2); border-radius: 10px; }
 .lib-side.edge .ls-card li { padding: 0 4px; }
+
+/* Request a song vedle + Přidat song */
+.hero-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }

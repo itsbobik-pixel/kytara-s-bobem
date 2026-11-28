@@ -875,7 +875,12 @@ function renderLibrary() {
       h('p', {}, shared
         ? 'Písničky s akordy pro všechny. Po přihlášení můžeš přidat i svoje.'
         : 'Vlož text, vyber tóninu a přetáhni akordy přímo nad slova.')),
-    h('button', { class: 'btn rainbow big', onclick: addSong }, '+ Přidat song')));
+    h('div', { class: 'hero-actions' },
+      shared && h('button', { class: 'btn big', title: 'Chybí ti tu písnička? Dej nám vědět.', onclick: e => {
+        if (!auth.user || auth.anon) { window.KSB_SUPA.openLogin('Pro žádost o písničku se přihlas.'); return; }
+        askSongRequest(e.currentTarget);
+      } }, '🙋 Request a song'),
+      h('button', { class: 'btn rainbow big', onclick: addSong }, '+ Přidat song'))));
 
   if (shared && auth.user && auth.localOnly.length) {
     wrap.append(h('div', { class: 'banner' },
@@ -1407,6 +1412,36 @@ function alongButton(song) {
     if (!auth.user || auth.anon) { sup.openLogin('Pro žádost o Play Along se přihlas.'); return; }
     askRequest(e.currentTarget, song);
   } }, '🙋 Request Play Along');
+}
+
+function askSongRequest(anchor) {
+  const artist = h('input', { type: 'text', placeholder: 'Interpret', maxlength: 120 });
+  const title = h('input', { type: 'text', placeholder: 'Název písničky', maxlength: 160 });
+  const yt = h('input', { type: 'url', placeholder: 'YouTube odkaz (nepovinné)' });
+  const err = h('p', { class: 'form-err', role: 'alert' });
+  const btn = h('button', { class: 'btn primary' }, 'Poslat');
+  btn.onclick = async () => {
+    const a = artist.value.trim(), t = title.value.trim(), v = yt.value.trim();
+    const id = v ? ytIdFrom(v) : null;
+    if (!a || !t) { err.textContent = 'Vyplň interpreta i název.'; return; }
+    if (v && !id) { err.textContent = 'Tohle nevypadá jako odkaz na YouTube.'; return; }
+    btn.disabled = true; btn.textContent = 'Posílám…'; err.textContent = '';
+    try {
+      await window.KSB_SUPA.requestSong(a, t, id);
+      closePopover();
+      toast('🙋 Díky! Žádost máme, písničku přidáme, jakmile to půjde.');
+    } catch (e) {
+      console.warn(e);
+      btn.disabled = false; btn.textContent = 'Poslat';
+      err.textContent = 'Žádost se nepovedlo odeslat. Zkus to znovu.';
+    }
+  };
+  openPopover(anchor, h('div', { class: 'al-ytpop' },
+    h('b', {}, 'Request a song'),
+    h('p', { class: 'hint' }, 'Chybí ti tu písnička? Napiš, kterou chceš, a přidáme ji.'),
+    artist, title, yt, err,
+    h('div', { class: 'modal-actions' }, h('button', { class: 'btn ghost', onclick: closePopover }, 'Zrušit'), btn)));
+  setTimeout(() => artist.focus(), 30);
 }
 
 function askRequest(anchor, song) {

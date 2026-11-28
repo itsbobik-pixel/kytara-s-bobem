@@ -236,3 +236,21 @@ create policy "jobs: přidat" on public.jobs for insert to authenticated
 drop policy "songs: přidat jako já" on public.songs;
 create policy "songs: přidat jako já" on public.songs for insert to authenticated
   with check (owner = auth.uid() and not coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false));
+
+-- ---------- žádosti o novou písničku (přihlášený napíše interpreta a název; admin je vidí v továrně) ----------
+create table public.song_requests (
+  id bigint generated always as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  artist text not null check (char_length(artist) between 1 and 120),
+  title text not null check (char_length(title) between 1 and 160),
+  yt text check (yt is null or yt ~ '^[A-Za-z0-9_-]{11}$'),
+  created_at timestamptz not null default now()
+);
+alter table public.song_requests enable row level security;
+create policy "song_requests: přidat" on public.song_requests for insert to authenticated
+  with check (user_id = (select auth.uid()) and not coalesce(((select auth.jwt()) ->> 'is_anonymous')::boolean, false));
+create policy "song_requests: číst" on public.song_requests for select to authenticated
+  using (user_id = (select auth.uid()) or (select public.is_admin()));
+create policy "song_requests: smazat" on public.song_requests for delete to authenticated
+  using ((select public.is_admin()));
+grant select, insert (artist, title, yt), delete on public.song_requests to authenticated;
