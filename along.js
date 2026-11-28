@@ -686,9 +686,14 @@ function alTick(force) {
   alOff.chords = adminChordOff();
   const tc = tReal + alOff.chords;   // akordy v textu s předstihem i v továrně (časová osa dole zůstává přesná)
   for (let i = 0; i < ch.length; i++) { if (ch[i].t <= tc) ci = i; else break; }
+  // poslední akord dozněl (nastavená délka, jinak konec písně) → nic nesvítí
+  if (ci >= 0 && ci === ch.length - 1) {
+    const end = AL.sync?.lastLen > 0 ? ch[ci].t + AL.sync.lastLen : (AL.dur || AL.sync?.dur || Infinity) - 0.05;
+    if (tc >= end) ci = ch.length;
+  }
   if (ci !== AL.lastChord || force) {
     if (AL.nowChordEl) AL.nowChordEl.classList.remove('now');
-    const c = ci >= 0 ? ch[ci] : null;
+    const c = ci >= 0 ? ch[ci] || null : null;
     AL.nowChordEl = c ? AL.refs.chords.get(c.li + ':' + c.pos) : null;
     if (AL.nowChordEl) AL.nowChordEl.classList.add('now');
     const setBig = (el, c) => {
@@ -703,7 +708,7 @@ function alTick(force) {
   }
   const meter = $('#alMeter');
   if (meter) {
-    const a = ci >= 0 ? ch[ci].t : 0, b = ch[ci + 1]?.t;
+    const a = ch[ci]?.t ?? 0, b = ci >= 0 ? ch[ci + 1]?.t : ch[0]?.t;
     meter.style.width = b ? Math.min(100, Math.max(0, (tc - a) / Math.max(0.1, b - a) * 100)) + '%' : '0%';
   }
   if (typeof factoryTick === 'function') factoryTick();
