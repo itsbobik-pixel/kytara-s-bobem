@@ -27,12 +27,12 @@ window.KSB_SUPA = (() => {
   });
   // Seznam stahuje jen názvy (šetří přenos dat); celá písnička se načte až při otevření.
   // Nenačtená písnička má partial: true a NIKDY se neukládá (jinak by se v databázi přepsala prázdnou).
-  const META = 'id, owner, author_name, title, artist, is_public, approved, updated_at, sync_dur:data->sync->>dur';
-  const FULL = 'id, owner, author_name, title, artist, is_public, approved, updated_at, data';
+  const META = 'id, owner, author_name, title, artist, is_public, approved, created_at, updated_at, sync_dur:data->sync->>dur';
+  const FULL = 'id, owner, author_name, title, artist, is_public, approved, created_at, updated_at, data';
   const fromMeta = r => ({
     id: r.id, title: r.title, artist: r.artist,
     key: { root: 7, minor: false }, capo: 0, baseKey: null, lines: [], custom: [], sync: null,
-    updated: Date.parse(r.updated_at) || 0, serverUpdated: r.updated_at,
+    updated: Date.parse(r.updated_at) || 0, serverUpdated: r.updated_at, created: Date.parse(r.created_at) || 0,
     owner: r.owner, author: r.author_name || '', isPublic: r.is_public,
     approved: r.approved !== false, hasSync: r.sync_dur != null,
     partial: true,
@@ -49,6 +49,7 @@ window.KSB_SUPA = (() => {
     custom: r.data?.custom || [],
     sync: r.data?.sync || null,
     updated: Date.parse(r.updated_at) || 0,
+    created: Date.parse(r.created_at) || 0,
     owner: r.owner,
     author: r.author_name || '',
     isPublic: r.is_public,
@@ -136,7 +137,14 @@ window.KSB_SUPA = (() => {
     auth.name = user?.user_metadata?.name || (auth.anon ? 'Host' : '');
     // značení akordů: nastavení účtu; bez účtu vždy mezinárodní (B)
     settings.notation = (user && !auth.anon && user.user_metadata?.notation) || (user && !auth.anon ? settings.notation : 'intl');
-    if (user && !auth.anon && typeof mergeFavs === 'function') mergeFavs(user.user_metadata?.favorites);
+    if (user && !auth.anon && typeof mergeFavs === 'function') {
+      // oblíbené: z databáze + ze starého uložení v účtu + z prohlížeče → všechno do databáze (kvůli „Nejoblíbenější“)
+      const { data: fr } = await sb.from('favorites').select('song_id');
+      const inDbFav = new Set((fr || []).map(r => r.song_id));
+      mergeFavs([...(user.user_metadata?.favorites || []), ...inDbFav]);
+      const missing = [...favSet()].filter(id => !inDbFav.has(id));
+      if (missing.length) setTimeout(() => missing.forEach(id => sb.from('favorites').insert({ song_id: id }).then(() => {})), 0);
+    }
     pls = null;
     if (user && !auth.anon) await loadPlaylists();
     if (user) {
@@ -161,7 +169,7 @@ window.KSB_SUPA = (() => {
 
   async function reload({ quiet = false } = {}) {
     try {
-      const [list] = await Promise.all([fetchSongs(), fetchJobs()]);
+      const [list] = await Promise.all([fetchSongs(), fetchJobs(), fetchTop()]);
       songs = list;
       rememberSynced(list);
       auth.loading = false;
@@ -542,9 +550,22 @@ window.KSB_SUPA = (() => {
     pls = pls.filter(x => x.id !== id);
   }
 
-  /** oblíbené písničky do účtu (ať platí na všech zařízeních) */
-  function saveFavs(list) {
-    setTimeout(() => { sb.auth.updateUser({ data: { favorites: list } }).catch(() => { /* zůstanou aspoň v prohlížeči */ }); }, 0);
+  /** oblíbená písnička do databáze (platí na všech zařízeních a počítá se do „Nejoblíbenější“) */
+  function setFav(id, on) {
+    setTimeout(async () => {
+      const q = on ? sb.from('favorites').upsert({ song_id: id }, { ignoreDuplicates: true })
+        : sb.from('favorites').delete().eq('song_id', id).eq('user_id', auth.user.id);
+      const { error } = await q;
+      if (error) return;
+      await fetchTop();
+      if (typeof renderSidePanel === 'function') renderSidePanel();
+    }, 0);
+  }
+  // nejoblíbenější songy (jen počty, kdo co označil zůstává skryté)
+  let top = [];
+  async function fetchTop() {
+    const { data, error } = await sb.rpc('top_favorites', { lim: 10 });
+    if (!error) top = data || [];
   }
 
   /** host bez e-mailu: anonymní účet, aby mohl přidat song (ten pak čeká na schválení) */
@@ -572,5 +593,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, saveFavs, playlists: () => pls, loadPlaylists, createPlaylist, updatePlaylist, deletePlaylist, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, setFav, topFavs: () => top, playlists: () => pls, loadPlaylists, createPlaylist, updatePlaylist, deletePlaylist, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
 })();

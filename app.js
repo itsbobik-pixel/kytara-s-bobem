@@ -548,14 +548,13 @@ function mergeFavs(list) {
   if (!Array.isArray(list)) return;
   const before = favSet().size;
   list.forEach(id => favs.add(id));
-  try { localStorage.setItem(LS_FAVS, JSON.stringify([...favs])); } catch { /* nic */ }
-  if (favs.size !== before && auth.mode === 'supabase' && auth.user && !auth.anon) window.KSB_SUPA.saveFavs?.([...favs]);
+  if (favs.size !== before) try { localStorage.setItem(LS_FAVS, JSON.stringify([...favs])); } catch { /* nic */ }
 }
 function toggleFav(id) {
   const f = favSet();
   if (f.has(id)) f.delete(id); else f.add(id);
   try { localStorage.setItem(LS_FAVS, JSON.stringify([...f])); } catch { /* nic */ }
-  if (auth.mode === 'supabase' && auth.user && !auth.anon) window.KSB_SUPA.saveFavs?.([...f]);
+  if (auth.mode === 'supabase' && auth.user && !auth.anon) window.KSB_SUPA.setFav?.(id, f.has(id));
   return f.has(id);
 }
 // ---------- playlisty ----------
@@ -565,7 +564,7 @@ function playlistsToggle(on) {
   return h('a', {
     class: 'btn ghost pl-btn' + (on ? ' pl-on' : ''), href: on ? '#' : '#playlisty',
     title: on ? 'Zpět na všechny songy' : 'Moje playlisty (pro přihlášené)',
-  }, h('span', { class: 'pl-ico' }, '♫'), ' Playlisty');
+  }, h('span', { class: 'pl-ico' }, '♫'), h('span', { class: 'tb-lbl' }, ' Playlisty'));
 }
 const songCount = n => n + (n === 1 ? ' písnička' : n >= 2 && n <= 4 ? ' písničky' : ' písniček');
 /** malý formulář na název playlistu (v okně) → zavolá done(name) */
@@ -604,17 +603,24 @@ async function togglePlaylistSong(p, songId) {
 }
 /** ⋯ u písničky: zatím Přidat do playlistu (vybrat existující / založit nový) */
 function openSongMenu(anchor, s) {
+  const fav = isFav(s.id);
+  const favItem = h('button', {
+    class: 'btn ghost fav-item',
+    onclick: () => { closePopover(); const on = toggleFav(s.id); toast(on ? `„${s.title}“ je v oblíbených ★` : `„${s.title}“ odebráno z oblíbených`); render(); },
+  }, h('span', { class: 'pl-check fav-check' }, fav ? '★' : '☆'), fav ? 'Odebrat z oblíbených' : 'Přidat do oblíbených');
   if (!hasAccount()) {
     openPopover(anchor, h('div', { class: 'account-menu song-menu' },
       h('h5', {}, s.title || 'Písnička'),
-      h('div', { class: 'menu-list' },
+      h('div', { class: 'menu-list' }, favItem,
         h('button', { class: 'btn ghost', onclick: () => { closePopover(); window.KSB_SUPA?.openLogin('Playlisty si může vytvořit jen přihlášený.'); } }, '♫ Přidat do playlistu…'))));
     return;
   }
   const list = plApi().playlists() || [];
   const inPl = route.pl && list.find(p => p.id === route.pl);
   openPopover(anchor, h('div', { class: 'account-menu song-menu' },
-    h('h5', {}, '♫ Přidat do playlistu'),
+    h('h5', {}, s.title || 'Písnička'),
+    h('div', { class: 'menu-list' }, favItem),
+    h('h5', { class: 'menu-sub' }, '♫ Přidat do playlistu'),
     h('div', { class: 'menu-list' },
       ...list.map(p => {
         const has = p.songs.includes(s.id);
@@ -672,7 +678,7 @@ function favToggle(on) {
   return h('a', {
     class: 'btn ghost fav-btn' + (on ? ' fav-on' : ''), href: on ? '#' : '#oblibene',
     title: on ? 'Zpět na všechny songy' : 'Jen moje oblíbené písničky (★ u písničky)',
-  }, h('span', { class: 'fav-ico' }, '★'), ' Oblíbené');
+  }, h('span', { class: 'fav-ico' }, '★'), h('span', { class: 'tb-lbl' }, ' Oblíbené'));
 }
 window.addEventListener('hashchange', render);
 
@@ -903,7 +909,9 @@ function renderLibrary() {
     id: 'songSearch', class: 'search', type: 'search', placeholder: 'Hledat song nebo interpreta…', value: searchQ,
     oninput: e => { searchQ = e.target.value; fillGrid(); },
   });
-  wrap.append(h('div', { class: 'lib-tools' }, search), grid);
+  const side = h('aside', { id: 'libSide', class: 'lib-side', 'aria-label': 'Nově přidané a nejoblíbenější' });
+  wrap.append(h('div', { class: 'lib-tools' }, search),
+    favOnly || playlist ? grid : h('div', { class: 'lib-cols' }, grid, side));
 
   const cz = new Intl.Collator('cs', { sensitivity: 'base' });
   // admin má nehotové (neschválené / soukromé) songy jen v továrně
@@ -916,6 +924,7 @@ function renderLibrary() {
       .filter(s => playlist || !hideUnready || isReady(s))
       .filter(s => !favOnly || isFav(s.id))
       .filter(s => !q || (s.title + ' ' + (s.artist || '') + ' ' + (s.author || '')).toLowerCase().includes(q));
+    renderSidePanel();
     if (!list.length) grid.append(h('li', { class: 'none' }, playlist && !q ? 'Playlist je zatím prázdný – ve zpěvníku klikni u písničky na ⋯ → Přidat do playlistu.' : favOnly && !q ? 'Zatím nemáš žádné oblíbené – klikni na ☆ u písničky.' : 'Nic nenalezeno.'));
     list.forEach((s, i) => {
       const color = CARD_COLORS[i % CARD_COLORS.length];
@@ -964,8 +973,34 @@ function renderLibrary() {
           }, '⋯') : null)));
     });
   }
-  fillGrid();
   app.append(wrap);
+  fillGrid();
+}
+
+/** panel vpravo vedle seznamu: Nově přidané + Nejoblíbenější (při hledání se schová) */
+function renderSidePanel() {
+  const side = document.getElementById('libSide');
+  if (!side) return;
+  side.innerHTML = '';
+  side.hidden = !!searchQ.trim();
+  if (side.hidden) return;
+  const ready = songs.filter(s => isReady(s));
+  const item = (s, extra) => h('li', {},
+    h('a', { href: s.hasSync !== false ? '#along-' + s.id : '#play-' + s.id, title: s.hasSync !== false ? 'Otevřít Play Along' : 'Otevřít akordy' },
+      h('span', { class: 'ls-title' }, s.title || 'Bez názvu'),
+      s.artist ? h('span', { class: 'ls-artist' }, s.artist) : null),
+    extra || null);
+  const card = (cls, title, items, empty) => h('section', { class: 'ls-card ' + cls },
+    h('h3', {}, title),
+    items.length ? h('ol', {}, ...items) : h('p', { class: 'ls-empty' }, empty));
+
+  const fresh = ready.filter(s => s.created).sort((a, b) => b.created - a.created).slice(0, 6);
+  const top = (window.KSB_SUPA?.topFavs?.() || [])
+    .map(t => ({ s: ready.find(x => x.id === t.song_id), n: Number(t.n) })).filter(t => t.s).slice(0, 6);
+  side.append(
+    card('ls-new', '🆕 Nově přidané', fresh.map(s => item(s)), 'Zatím nic nového.'),
+    card('ls-top', '🔥 Nejoblíbenější', top.map(t => item(t.s, h('span', { class: 'ls-n', title: 'Kolik lidí ji má v oblíbených' }, '★ ' + t.n))),
+      'Zatím nikdo nic neoznačil – dej písničce ☆ a bude tady.'));
 }
 
 function addDemo() {

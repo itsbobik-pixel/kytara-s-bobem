@@ -3,7 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>playalong.cz</title>
+  <title>playalong.cz – zpěvník s akordy a play-along k písničkám</title>
+  <meta name="description" content="Společný zpěvník s akordy a play-along: hraj na kytaru s nahrávkou, text se přebarvuje podle zpěvu a akordy svítí v pravou chvíli. Transpozice, kapodastr, oblíbené a playlisty.">
+  <link rel="canonical" href="https://playalong.cz/">
+  <meta name="robots" content="index, follow">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="playalong.cz">
+  <meta property="og:locale" content="cs_CZ">
+  <meta property="og:url" content="https://playalong.cz/">
+  <meta property="og:title" content="playalong.cz – zpěvník s akordy a play-along">
+  <meta property="og:description" content="Společný zpěvník s akordy a play-along: hraj na kytaru s nahrávkou, text se přebarvuje podle zpěvu a akordy svítí v pravou chvíli. Transpozice, kapodastr, oblíbené a playlisty.">
+  <meta property="og:image" content="https://playalong.cz/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="playalong.cz – zpěvník s akordy a play-along">
+  <meta name="twitter:description" content="Společný zpěvník s akordy a play-along: hraj na kytaru s nahrávkou, text se přebarvuje podle zpěvu a akordy svítí v pravou chvíli. Transpozice, kapodastr, oblíbené a playlisty.">
+  <meta name="twitter:image" content="https://playalong.cz/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"playalong.cz","url":"https://playalong.cz/","inLanguage":"cs","description":"Společný zpěvník s akordy a play-along: hraj na kytaru s nahrávkou, text se přebarvuje podle zpěvu a akordy svítí v pravou chvíli. Transpozice, kapodastr, oblíbené a playlisty."}</script>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -11,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=133">
+  <link rel="stylesheet" href="styles.css?v=135">
 </head>
 <body>
   <header class="topbar">
@@ -22,7 +39,15 @@
     <div class="topbar-actions" id="topActions"></div>
   </header>
 
-  <main id="app"></main>
+  <main id="app">
+    <div class="wrap seo-fallback">
+      <h1>Společný zpěvník s akordy a play-along</h1>
+      <p>playalong.cz je zpěvník pro kytaristy: písničky s akordy nad textem, transpozice a kapodastr jedním klikem
+        a play-along s nahrávkou – text se přebarvuje podle zpěvu a akordy svítí přesně ve chvíli, kdy se hrají.
+        Ukládej si oblíbené písničky a skládej playlisty na hraní u ohně nebo v kroužku.</p>
+      <noscript><p>Pro zpěvník je potřeba zapnout JavaScript.</p></noscript>
+    </div>
+  </main>
 
   <div id="modalRoot"></div>
   <div id="popover" class="popover" hidden></div>
@@ -30,11 +55,11 @@
   <div id="toast" class="toast" role="status"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="config.js?v=133"></script>
-  <script src="supa.js?v=133"></script>
-  <script src="keydetect.js?v=133"></script>
-  <script src="along.js?v=133"></script>
-  <script src="factory.js?v=133"></script>
-  <script src="app.js?v=133"></script>
+  <script src="config.js?v=135"></script>
+  <script src="supa.js?v=135"></script>
+  <script src="keydetect.js?v=135"></script>
+  <script src="along.js?v=135"></script>
+  <script src="factory.js?v=135"></script>
+  <script src="app.js?v=135"></script>
 </body>
 </html>

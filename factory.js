@@ -15,7 +15,7 @@ function renderFactoryList() {
   const app = $('#app');
   app.innerHTML = '';
   document.body.classList.remove('playing');
-  renderTopActions([factoryToggle(true)]);
+  renderTopActions([favToggle(false), playlistsToggle(false), factoryToggle(true)]);
   const wrap = h('div', { class: 'wrap factory' }, h('h1', {}, '🏭 Továrna'),
     h('p', { class: 'sub' }, 'Písničky, které ještě nejsou hotové: start, tempo (ťukání dob), časy akordů, Akordy after a schválení.'));
   if (!auth.admin) { wrap.append(h('p', {}, 'Jen pro admina.')); app.append(wrap); return; }

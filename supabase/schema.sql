@@ -182,3 +182,28 @@ create policy playlists_own on public.playlists for all to authenticated
   with check (owner = (select auth.uid()) and not coalesce(((select auth.jwt())->>'is_anonymous')::boolean, false));
 grant select, insert, update, delete on public.playlists to authenticated;
 create trigger playlists_touch before update on public.playlists for each row execute function public.touch_updated_at();
+
+-- ---------- oblíbené (kvůli „Nejoblíbenější“; kdo co označil vidí jen on sám) ----------
+create table if not exists public.favorites (
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  song_id text not null references public.songs(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, song_id)
+);
+alter table public.favorites enable row level security;
+create policy favorites_own on public.favorites for all to authenticated
+  using (user_id = (select auth.uid()) and not coalesce(((select auth.jwt()) ->> 'is_anonymous')::boolean, false))
+  with check (user_id = (select auth.uid()) and not coalesce(((select auth.jwt()) ->> 'is_anonymous')::boolean, false));
+grant select, insert, delete on public.favorites to authenticated;
+
+-- počty pro panel „Nejoblíbenější“ (jen veřejné a schválené songy, bez jmen)
+create or replace function public.top_favorites(lim int default 10)
+returns table(song_id text, n bigint) language sql stable security definer set search_path = public as $$
+  select f.song_id, count(*) as n
+  from public.favorites f join public.songs s on s.id = f.song_id
+  where s.is_public and s.approved
+  group by f.song_id
+  order by n desc, max(f.created_at) desc
+  limit least(greatest(lim, 1), 50);
+$$;
+grant execute on function public.top_favorites(int) to anon, authenticated;
