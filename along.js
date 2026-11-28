@@ -552,6 +552,7 @@ function renderAlongSheet(sheet) {
   const refs = { lines: [], chords: new Map() };
   let sec = null;
   const counts = {};
+  let funK = 0;   // pořadí hudební části (Moving Lyrics: každá jiná animace)
   AL.model.lines.forEach(L => {
     const line = song.lines[L.li];
     if (line.section) {
@@ -576,7 +577,7 @@ function renderAlongSheet(sheet) {
       const name = ['intro', 'inter', 'solo', 'outro', 'bridge'].includes(sec) ? secLabel(sec) : secLabel('inter');
       const notes = () => h('span', { class: 'al-dance', 'aria-hidden': 'true' }, ...['♪', '♫', '♪', '♬'].map(n => h('i', {}, n)));
       el.classList.add('al-break');
-      el.append(notes(), h('span', { class: 'al-break-name' }, name), notes());
+      el.append(notes(), h('span', { class: 'al-break-name' }, name), notes(), funFor(song.id, funK++));
       el.addEventListener('click', () => { if (L.s != null) alJump(L.s); });
       sheet.append(el);
       refs.lines[L.li] = { el, chars: [], L };
@@ -625,13 +626,103 @@ function alLoop() {
   alTick(false);
 }
 
+// ---------- Moving Lyrics: vtipné animace do částí, kde hraje jen hudba (vlastní SVG, náhodně při každém otevření) ----------
+const FUN = [
+  // 1 tančící panáček
+  `<g class="fs fb"><circle cx="80" cy="16" r="9"/><line x1="80" y1="25" x2="80" y2="54"/>
+   <line class="fa1" x1="80" y1="33" x2="62" y2="18"/><line class="fa2" x1="80" y1="33" x2="98" y2="18"/>
+   <line class="fl1" x1="80" y1="54" x2="68" y2="80"/><line class="fl2" x1="80" y1="54" x2="92" y2="80"/></g>`,
+  // 2 kočka letící na kytaře s duhou
+  `<g class="fw"><rect x="6" y="38" width="62" height="5" fill="var(--d1)"/><rect x="6" y="43" width="62" height="5" fill="var(--d3)"/>
+   <rect x="6" y="48" width="62" height="5" fill="var(--d5)"/><rect x="6" y="53" width="62" height="5" fill="var(--d4)"/></g>
+   <g class="fb"><ellipse cx="96" cy="58" rx="26" ry="9" fill="#b86b2c"/><circle cx="100" cy="58" r="4" fill="#3a2414"/>
+   <rect x="120" y="55" width="26" height="6" rx="2" fill="#6b3e1c"/>
+   <ellipse cx="92" cy="44" rx="14" ry="10" fill="#9a9aa8"/><circle cx="108" cy="34" r="10" fill="#9a9aa8"/>
+   <path d="M100 27 L102 17 L107 25 Z M111 25 L116 17 L117 28 Z" fill="#9a9aa8"/>
+   <circle cx="105" cy="33" r="1.8" fill="#222"/><circle cx="112" cy="33" r="1.8" fill="#222"/><path d="M106 38 q2.5 2 5 0" stroke="#222" stroke-width="1.5" fill="none"/>
+   <path d="M78 42 q-10 -10 -4 -18" stroke="#9a9aa8" stroke-width="4" fill="none" stroke-linecap="round"/></g>
+   <g class="ftw" fill="var(--d2)"><text x="30" y="20">✦</text><text x="140" y="16">✦</text><text x="58" y="86">✦</text></g>`,
+  // 3 tančící banán
+  `<g class="fsw" style="transform-origin:80px 80px"><path d="M60 14 q-18 40 12 64 q22 10 38 -6 q-30 4 -38 -22 q-6 -18 -2 -34 z" fill="#f5d327" stroke="#a8891a" stroke-width="2"/>
+   <path d="M60 14 l-4 -8 l6 2 z" fill="#5a4a14"/><circle cx="68" cy="44" r="3" fill="#222"/><circle cx="78" cy="48" r="3" fill="#222"/>
+   <path d="M68 56 q6 6 12 2" stroke="#222" stroke-width="2" fill="none"/></g>`,
+  // 4 disko koule
+  `<g class="fray"><path d="M80 40 L20 88 L38 88 Z" fill="var(--d1)"/><path d="M80 40 L72 88 L90 88 Z" fill="var(--d3)"/><path d="M80 40 L126 88 L144 88 Z" fill="var(--d5)"/></g>
+   <line x1="80" y1="0" x2="80" y2="14" stroke="var(--muted)" stroke-width="2"/>
+   <circle cx="80" cy="36" r="22" fill="#c9ccd6"/><g class="fspin" style="transform-origin:80px 36px"><path d="M60 28 h40 M58 36 h44 M60 44 h40 M70 16 v40 M80 14 v44 M90 16 v40" stroke="#8a8fa0" stroke-width="1.5"/></g>
+   <circle class="ftw" cx="70" cy="28" r="3" fill="#fff"/>`,
+  // 5 ekvalizér
+  [1, 2, 3, 4, 5, 6, 7, 8].map(i => `<rect class="feq" style="animation-delay:-${((i * 0.37) % 1).toFixed(2)}s" x="${14 + (i - 1) * 17}" y="10" width="12" height="72" rx="3" fill="var(--d${(i % 6) + 1})"/>`).join(''),
+  // 6 kachnička kývající hlavou
+  `<ellipse cx="78" cy="62" rx="34" ry="18" fill="#ffd23a"/><path d="M48 58 q-8 -4 -6 -12 q6 4 12 6z" fill="#ffd23a"/>
+   <g class="fnod" style="transform-origin:96px 50px"><circle cx="100" cy="34" r="15" fill="#ffd23a"/><path d="M113 34 l14 3 l-14 5 z" fill="#ff8a1e"/><circle cx="104" cy="30" r="2.5" fill="#222"/></g>
+   <path class="fw" d="M52 84 q28 6 56 0" stroke="#4aa8ff" stroke-width="3" fill="none"/>`,
+  // 7 smajlík, na kterého spadnou brýle
+  `<circle cx="80" cy="46" r="30" fill="#ffd23a"/><path d="M66 58 q14 10 28 0" stroke="#222" stroke-width="3" fill="none"/>
+   <g class="fdrop"><rect x="56" y="34" width="20" height="10" fill="#111"/><rect x="84" y="34" width="20" height="10" fill="#111"/><rect x="50" y="34" width="60" height="4" fill="#111"/>
+   <rect x="58" y="37" width="4" height="3" fill="#fff"/><rect x="86" y="37" width="4" height="3" fill="#fff"/></g>`,
+  // 8 rocker – headbang se vzduchovou kytarou
+  `<g class="fs"><line x1="80" y1="38" x2="80" y2="66"/><line x1="80" y1="66" x2="66" y2="86"/><line x1="80" y1="66" x2="94" y2="86"/>
+   <g class="fhead" style="transform-origin:80px 38px"><circle cx="84" cy="26" r="9"/><path d="M76 20 q-8 10 -4 24 M80 18 q-6 14 -2 26" fill="none"/></g>
+   <path d="M58 48 l50 14" stroke="var(--d1)" stroke-width="6"/><circle cx="64" cy="52" r="8" fill="var(--d1)" stroke="none"/>
+   <line class="fstrum" x1="80" y1="44" x2="68" y2="54" style="transform-origin:80px 44px"/><line x1="80" y1="44" x2="102" y2="56"/></g>`,
+  // 9 skákající žabka
+  `<ellipse class="fshadow" cx="80" cy="86" rx="20" ry="3" fill="var(--muted)" opacity=".35" style="transform-origin:80px 86px"/>
+   <g class="fjump"><ellipse cx="80" cy="64" rx="24" ry="14" fill="#4cc35a"/><circle cx="70" cy="48" r="7" fill="#4cc35a"/><circle cx="90" cy="48" r="7" fill="#4cc35a"/>
+   <circle cx="70" cy="47" r="3.5" fill="#fff"/><circle cx="90" cy="47" r="3.5" fill="#fff"/><circle cx="70" cy="47" r="1.6" fill="#222"/><circle cx="90" cy="47" r="1.6" fill="#222"/>
+   <path d="M70 66 q10 6 20 0" stroke="#1d6b27" stroke-width="2" fill="none"/><path d="M58 74 l-10 8 h10 M102 74 l10 8 h-10" stroke="#2f8f3a" stroke-width="4" fill="none" stroke-linecap="round"/></g>`,
+  // 10 kaktus s maracas
+  `<g class="fsw" style="transform-origin:80px 88px"><rect x="70" y="20" width="20" height="68" rx="10" fill="#3fae5a"/>
+   <path d="M70 52 h-12 q-6 0 -6 -6 v-12" stroke="#3fae5a" stroke-width="10" fill="none" stroke-linecap="round"/>
+   <path d="M90 46 h12 q6 0 6 -6 v-10" stroke="#3fae5a" stroke-width="10" fill="none" stroke-linecap="round"/>
+   <circle cx="76" cy="36" r="2.2" fill="#222"/><circle cx="85" cy="36" r="2.2" fill="#222"/><path d="M76 44 q4.5 4 9 0" stroke="#222" stroke-width="2" fill="none"/>
+   <g class="fshake" style="transform-origin:52px 32px"><line x1="52" y1="32" x2="48" y2="16" stroke="#7a4a20" stroke-width="3"/><ellipse cx="47" cy="11" rx="7" ry="8" fill="var(--d1)"/></g>
+   <g class="fshake2" style="transform-origin:108px 30px"><line x1="108" y1="30" x2="112" y2="14" stroke="#7a4a20" stroke-width="3"/><ellipse cx="113" cy="9" rx="7" ry="8" fill="var(--d5)"/></g></g>`,
+];
+let funOrder = [], funSong = null;
+/** animace pro k-tou hudební část (pořadí náhodné, zamíchá se při každém otevření písničky) */
+function funFor(songId, k) {
+  if (funSong !== songId || !funOrder.length) {
+    funOrder = FUN.map((_, i) => i);
+    for (let i = funOrder.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [funOrder[i], funOrder[j]] = [funOrder[j], funOrder[i]]; }
+    funSong = songId;
+  }
+  const el = h('span', { class: 'al-fun', 'aria-hidden': 'true' });
+  el.innerHTML = '<svg viewBox="0 0 160 90" width="160" height="90">' + FUN[funOrder[k % FUN.length]] + '</svg>';
+  return el;
+}
+// hlášky při čekání na reklamu na YouTube (náhodně, pokaždé jiná)
+const AD_QUIPS = [
+  '📺 Reklama… ideální chvíle naladit kytaru 🎸',
+  '📺 YouTube si bere slovo. Text počká, slibuju.',
+  '📺 Reklama. Zkus zatím zahrát G dur bez koukání.',
+  '📺 I rockové hvězdy čekají na zvukaře. Chvilku strpení.',
+  '📺 Reklama běží, prsty si zatím odpočinou 🖐️',
+  '📺 Protáhni zápěstí – kapodastr nikam neuteče.',
+  '📺 Text si dává pauzu na čaj ☕ Hned je zpátky.',
+  '📺 Tohle není sólo, to je reklama. Vydrž.',
+  '📺 Struny se mezitím naladí samy. Ne, nenaladí 😄',
+  '📺 Reklama nebo načítání… zabrnkej si Am, to se hodí vždycky.',
+];
+let adQuip = -1;
+function nextAdQuip() {
+  let i = Math.floor(Math.random() * AD_QUIPS.length);
+  if (i === adQuip) i = (i + 1) % AD_QUIPS.length;
+  adQuip = i;
+  return AD_QUIPS[i];
+}
+
 function alTick(force) {
   if (!AL.model || !AL.refs) return;
   const tReal = alNow();
   const t = tReal + (AL.edit ? 0 : alOff.text);   // zobrazený čas textu (při ladění časů bez posunu)
   const song = alSong();
   const ad = $('#alAd');
-  if (ad) ad.hidden = !(AL.engine === 'yt' && AL.ytAd);
+  if (ad) {
+    const show = AL.engine === 'yt' && AL.ytAd;
+    if (show && ad.hidden) ad.textContent = nextAdQuip();   // každá reklama = jiná hláška
+    ad.hidden = !show;
+  }
   // čas
   const time = $('#alTime');
   if (time) {

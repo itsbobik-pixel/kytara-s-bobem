@@ -947,6 +947,53 @@ body.al-editing .al-yt { bottom: calc(var(--tl-h, 300px) + 12px); }   /* nad edi
 .line.al-break.cur .al-dance i:nth-child(2) { animation-delay: .15s; } .line.al-break.cur .al-dance i:nth-child(3) { animation-delay: .3s; } .line.al-break.cur .al-dance i:nth-child(4) { animation-delay: .45s; }
 @keyframes al-dance { 0%, 100% { transform: translateY(0) rotate(-8deg) scale(1); } 30% { transform: translateY(-.45em) rotate(10deg) scale(1.15); } 60% { transform: translateY(.05em) rotate(-4deg) scale(.95); } }
 @media (prefers-reduced-motion: reduce) { .line.al-break.cur .al-dance i { animation: none; } }
+/* Moving Lyrics: vtipné animace v hudebních částech (hýbou se, jen když část zrovna hraje) */
+.al-lyrics .line.al-break { flex-wrap: wrap; }
+.al-fun { flex-basis: 100%; display: flex; justify-content: center; opacity: .4; transition: opacity .3s; }
+.al-fun svg { width: 160px; height: 90px; overflow: visible; }
+.al-fun svg * { transform-box: view-box; }
+.al-fun .fs { stroke: var(--ink); stroke-width: 4; stroke-linecap: round; fill: none; }
+.al-fun .fs circle { fill: var(--ink); }
+.line.al-break.cur .al-fun { opacity: 1; }
+.al-fun svg * { animation-play-state: paused !important; }
+.line.al-break.cur .al-fun svg * { animation-play-state: running !important; }
+.al-fun .fb { animation: fn-bob .6s ease-in-out infinite; }
+.al-fun .fa1 { transform-origin: 80px 33px; animation: fn-arm .6s ease-in-out infinite; }
+.al-fun .fa2 { transform-origin: 80px 33px; animation: fn-arm2 .6s ease-in-out infinite; }
+.al-fun .fl1 { transform-origin: 80px 54px; animation: fn-leg .6s ease-in-out infinite; }
+.al-fun .fl2 { transform-origin: 80px 54px; animation: fn-leg .6s ease-in-out infinite; animation-delay: -.3s; }
+.al-fun .fw { animation: fn-wave .5s steps(2) infinite; }
+.al-fun .ftw { animation: fn-twinkle .8s ease-in-out infinite; }
+.al-fun .fsw { animation: fn-sway .8s ease-in-out infinite; }
+.al-fun .fray { transform-origin: 80px 40px; animation: fn-ray 1.2s ease-in-out infinite; }
+.al-fun .fspin { animation: fn-slide 1s linear infinite; }
+.al-fun .feq { transform-origin: 0 82px; animation: fn-eq .7s ease-in-out infinite; }
+.al-fun .fnod { animation: fn-nod .5s ease-in-out infinite; }
+.al-fun .fdrop { animation: fn-drop 2.6s ease-in infinite; }
+.al-fun .fhead { animation: fn-bang .45s ease-in-out infinite; }
+.al-fun .fstrum { animation: fn-strum .25s ease-in-out infinite; }
+.al-fun .fjump { animation: fn-jump .9s ease-in-out infinite; }
+.al-fun .fshadow { animation: fn-shadow .9s ease-in-out infinite; }
+.al-fun .fshake { animation: fn-shake .3s ease-in-out infinite; }
+.al-fun .fshake2 { animation: fn-shake .3s ease-in-out infinite reverse; }
+@keyframes fn-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes fn-arm { 0%, 100% { transform: rotate(-20deg); } 50% { transform: rotate(60deg); } }
+@keyframes fn-arm2 { 0%, 100% { transform: rotate(20deg); } 50% { transform: rotate(-60deg); } }
+@keyframes fn-leg { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+@keyframes fn-wave { 0% { transform: translateY(-2px); } 100% { transform: translateY(2px); } }
+@keyframes fn-twinkle { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+@keyframes fn-sway { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg) scaleY(.94); } }
+@keyframes fn-ray { 0%, 100% { opacity: .35; transform: rotate(-8deg); } 50% { opacity: .9; transform: rotate(8deg); } }
+@keyframes fn-slide { 0% { transform: translateX(-5px); } 100% { transform: translateX(5px); } }
+@keyframes fn-eq { 0%, 100% { transform: scaleY(.2); } 50% { transform: scaleY(1); } }
+@keyframes fn-nod { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(16deg) translateY(3px); } }
+@keyframes fn-drop { 0% { transform: translateY(-70px); opacity: 0; } 10% { opacity: 1; } 40%, 85% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(0); opacity: 0; } }
+@keyframes fn-bang { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(28deg); } }
+@keyframes fn-strum { 0%, 100% { transform: rotate(-20deg); } 50% { transform: rotate(25deg); } }
+@keyframes fn-jump { 0%, 100% { transform: translateY(0) scaleY(.92); } 15% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-34px); } 85% { transform: translateY(0); } }
+@keyframes fn-shadow { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.5); } }
+@keyframes fn-shake { 0%, 100% { transform: rotate(-22deg); } 50% { transform: rotate(22deg); } }
+@media (prefers-reduced-motion: reduce) { .al-fun svg * { animation: none !important; } }
 /* oblíbené: hvězdička u písničky + tlačítko Oblíbené vedle Továrny */
 .sl-star { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 0; background: none; cursor: pointer; font-size: 20px; line-height: 1; color: color-mix(in srgb, var(--muted) 70%, transparent); border-radius: 50%; padding: 0; transition: color .15s, transform .15s; }
 .sl-star:hover { color: #F5B400; transform: scale(1.15); }
