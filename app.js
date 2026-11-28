@@ -873,14 +873,15 @@ function renderLibrary() {
         ? h('h1', {}, 'Společný ', h('span', { class: 'hl' }, 'zpěvník'))
         : h('h1', {}, 'Tvoje ', h('span', { class: 'hl' }, 'songy')),
       h('p', {}, shared
-        ? 'Písničky s akordy pro všechny. Po přihlášení můžeš přidat i svoje.'
+        ? 'Písničky s akordy pro všechny. Chybí ti nějaká? Napiš si o ni.'
         : 'Vlož text, vyber tóninu a přetáhni akordy přímo nad slova.')),
     h('div', { class: 'hero-actions' },
-      shared && h('button', { class: 'btn big', title: 'Chybí ti tu písnička? Dej nám vědět.', onclick: e => {
+      shared && h('button', { class: 'btn rainbow big', title: 'Chybí ti tu písnička? Dej nám vědět.', onclick: e => {
         if (!auth.user || auth.anon) { window.KSB_SUPA.openLogin('Pro žádost o písničku se přihlas.'); return; }
         askSongRequest(e.currentTarget);
       } }, '🙋 Request a song'),
-      h('button', { class: 'btn rainbow big', onclick: addSong }, '+ Přidat song'))));
+      // přidávat písničky může jen admin (ostatní o ně požádají)
+      (!shared || auth.admin) && h('button', { class: shared ? 'btn big' : 'btn rainbow big', onclick: addSong }, '+ Přidat song'))));
 
   if (shared && auth.user && auth.localOnly.length) {
     wrap.append(h('div', { class: 'banner' },
@@ -898,9 +899,9 @@ function renderLibrary() {
     wrap.append(h('div', { class: 'empty' },
       h('div', { class: 'big-emoji' }, '🎸'),
       h('h2', {}, 'Zatím tu nic není'),
-      h('p', {}, shared ? 'Buď první, kdo sem přidá písničku.' : 'Přidej první song, nebo si nahraj ukázku a zkus si, jak to funguje.'),
+      h('p', {}, shared ? 'Zatím tu nic není.' : 'Přidej první song, nebo si nahraj ukázku a zkus si, jak to funguje.'),
       h('div', { class: 'row' },
-        h('button', { class: 'btn primary big', onclick: addSong }, '+ Přidat song'),
+        (!shared || auth.admin) && h('button', { class: 'btn primary big', onclick: addSong }, '+ Přidat song'),
         !shared && h('button', { class: 'btn big', onclick: addDemo }, 'Nahrát ukázku'))));
     app.append(wrap);
     return;

@@ -254,3 +254,8 @@ create policy "song_requests: číst" on public.song_requests for select to auth
 create policy "song_requests: smazat" on public.song_requests for delete to authenticated
   using ((select public.is_admin()));
 grant select, insert (artist, title, yt), delete on public.song_requests to authenticated;
+
+-- přidávat písničky smí jen admin (ostatní o ně žádají přes song_requests)
+drop policy "songs: přidat jako já" on public.songs;
+create policy "songs: přidat jako já" on public.songs for insert to authenticated
+  with check (owner = (select auth.uid()) and (select public.is_admin()));
