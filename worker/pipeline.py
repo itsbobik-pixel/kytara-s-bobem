@@ -210,6 +210,8 @@ def words_to_sync(lines, ours):
     """sync.lines[].w = [[pos, len, start, end(, 1 = délka podle zpěvu)], ...] (jako v appce)."""
     out = [[] for _ in lines]
     for o in ours:
+        if o.get('start') is None or o.get('end') is None:
+            continue   # slovo se v nahrávce nenašlo (jiný text / mluvené slovo) → bez času
         w = [o['pos'], o['len'], round(o['start'], 3), round(o['end'], 3)]
         if o.get('m'):
             w.append(1)
