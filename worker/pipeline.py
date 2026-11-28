@@ -443,8 +443,9 @@ def snap_chords(items, beats, C, dur, shift=0, bars=None, BAR=1.5, EARLY=2.0, LA
     lt = types[items[-1]['key']]
     end = min(dur, items[-1]['t'] + 6)
     if items[-1].get('free'):   # poslední akord bez textu: nesmí utéct do doznění
-        for j in list(dp[-1]):
-            if beats[j] > items[-1]['t'] + LATE * bl * 2:
+        late = [j for j in dp[-1] if beats[j] > items[-1]['t'] + LATE * bl * 2]
+        if len(late) < len(dp[-1]):   # všechny pozdě (odhad času je mimo) → nechat je být, ať nespadne
+            for j in late:
                 del dp[-1][j]
     jb = max(dp[-1], key=lambda j: dp[-1][j] + seg(lt, beats[j], end))
     assign = [0] * K
