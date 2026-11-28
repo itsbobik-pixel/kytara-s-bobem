@@ -1197,7 +1197,6 @@ function relocateChord(L, c, t) {
   const song = current();   // skutečná písnička (ne zobrazení s kapodastrem)
   const src = song.lines[L.li];
   if (!src || !src.text.trim()) return;
-  if (c.pos < 0 && relocatePre(L, c, t, song, src)) return;   // akord před textem zůstává na svém řádku
   if (c.pos >= src.text.length && relocatePost(L, c, t, song, src)) return;   // akord za textem taky
   // řádek s textem: zpívaný úsek řádku [první slovo, reálný konec posledního slova];
   // čas v pauze za koncem řádku patří PŘED text dalšího řádku (akord přichází před zpěvem)
@@ -1236,7 +1235,7 @@ function relocateChord(L, c, t) {
   // volné místo (na stejném znaku nesmí být dva akordy)
   const taken = new Set(tl.chords.filter(x => !(tgt.li === L.li && x === chObj)).map(x => x.pos));
   while (taken.has(pos)) pos += pos < 0 ? -1 : 1;
-  if (pos < -16) return;
+  if (pos < -8) return;
   if (tgt.li === L.li && pos === chObj.pos) return;
   if (tgt.li !== L.li) {
     // akordy cílového řádku si nejdřív uloží svůj čas (ať se nehnou)
@@ -1250,36 +1249,6 @@ function relocateChord(L, c, t) {
   entry[0] = pos;
   tl.chords.sort((a, b) => a.pos - b.pos);
   if (AL.sel && AL.sel.li === L.li && AL.sel.pos !== undefined) AL.sel = { li: tgt.li, pos };
-}
-
-/** akord před textem (pre) při posunu v čase neopouští svůj řádek: dokud je před prvním slovem,
- *  akordy před textem se jen seřadí podle času (nejpozdější těsně u textu); když se posune do zpívané
- *  části, přesune se do textu téhož řádku. Vrací false, když se má použít běžné přesouvání. */
-function relocatePre(L, c, t, song, src) {
-  const sl = AL.sync.lines[L.li] || (AL.sync.lines[L.li] = { w: [], c: [] });
-  const chObj = src.chords.find(x => x.pos === c.pos);
-  const entry = sl.c.find(x => x[0] === c.pos);
-  if (!chObj || !entry) return false;
-  // ostatní akordy řádku si uloží svůj čas (ať se nehnou)
-  for (const cc of L.chords) if (cc.t != null && !sl.c.some(x => x[0] === cc.pos)) sl.c.push([cc.pos, r3(cc.t)]);
-  const first = L.words.length ? L.words[0].s : Infinity;
-  if (t >= first) {   // do zpívané části → nad slovo, které se v tu chvíli zpívá (stejný řádek)
-    let pos = L.words[0].pos;
-    for (const w of L.words) if (w.s <= t + 0.03) pos = w.pos + Math.min(w.len - 1, Math.max(0, Math.round((t - w.s) / Math.max(0.05, wordEnd(w) - w.s) * w.len)));
-    const taken = new Set(src.chords.filter(x => x !== chObj).map(x => x.pos));
-    while (taken.has(pos)) pos++;
-    chObj.pos = pos; entry[0] = pos;
-  } else {   // zůstává před textem: všechny akordy před textem seřadit podle času
-    const pre = src.chords.filter(x => x.pos < 0).map(x => {
-      const e = sl.c.find(y => y[0] === x.pos);
-      return { x, e, t: x === chObj ? t : (e ? e[1] : -1) };
-    }).sort((a, b) => a.t - b.t);
-    pre.forEach((o, i) => { o.np = i - pre.length; });
-    for (const o of pre) { o.x.pos = o.np; if (o.e) o.e[0] = o.np; }
-  }
-  src.chords.sort((a, b) => a.pos - b.pos);
-  if (AL.sel && AL.sel.li === L.li && AL.sel.pos !== undefined) AL.sel = { li: L.li, pos: chObj.pos };
-  return true;
 }
 
 /** akord za koncem textu při posunu v čase zůstává na svém řádku (nepřeskočí před další řádek):
