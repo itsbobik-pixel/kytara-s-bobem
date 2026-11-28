@@ -1803,6 +1803,7 @@ function renderSheet() {
             startDrag(e, {
               kind: 'moveChord', li, pos: i, chord: { root: chord.root, q: chord.q, bass: chord.bass ?? null },
               label: chordName(chord, song.key), cls: degClass(chord.root, song.key), srcEl: ce,
+              clone: e.shiftKey && !afterMode(),   // Shift + táhnout = kopie akordu
               onClick: () => { if (!afterMode()) openChordPopover(ce, li, i); },
             });
           });
@@ -2276,8 +2277,8 @@ function beginDragVisual() {
   const isSec = p.kind === 'section' || p.kind === 'moveSection';
   drag.ghost = h('div', { class: 'chip drag-ghost ' + (isSec ? 'sec' : p.cls), 'data-s': p.sec || null }, p.label);
   document.body.append(drag.ghost);
-  if (p.srcEl) p.srcEl.classList.add('ghosted');
-  if (p.kind === 'moveChord' || p.kind === 'moveSection') $('#trash').classList.add('show');
+  if (p.srcEl && !p.clone) p.srcEl.classList.add('ghosted');
+  if ((p.kind === 'moveChord' && !p.clone) || p.kind === 'moveSection') $('#trash').classList.add('show');
   const loop = () => {   // automatické rolování u kraje okna
     if (!drag) return;
     const edge = 70;
@@ -2352,7 +2353,7 @@ function findLineTarget(x, y) {
   return l ? { li: +l.dataset.li, el: l } : null;
 }
 
-function onDragEnd() {
+function onDragEnd(e) {
   if (!drag) return;
   const d = drag;
   teardownDrag();
@@ -2364,6 +2365,16 @@ function onDragEnd() {
 
   if (p.kind === 'chord') {
     if (t) placeChord(t.li, t.pos, p.chord);
+  } else if (p.kind === 'moveChord' && (p.clone || (e?.shiftKey && !afterMode()))) {
+    // Shift: kopie – původní akord zůstane
+    if (!t || (t.li === p.li && t.pos === p.pos)) { renderSheet(); return; }
+    pushUndo(song);
+    const dst = song.lines[t.li];
+    dst.chords = dst.chords.filter(c => c.pos !== t.pos);
+    dst.chords.push({ pos: t.pos, ...p.chord });
+    dst.chords.sort((a, b) => a.pos - b.pos);
+    syncChordDel(song, t.li, t.pos);
+    touch(song); renderSheet();
   } else if (p.kind === 'moveChord') {
     if (t && t.li === p.li && t.pos === p.pos) { renderSheet(); return; }
     if (!t && afterMode()) { renderSheet(); return; }   // after: akord se nedá smazat, jen posunout
