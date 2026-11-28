@@ -207,3 +207,32 @@ returns table(song_id text, n bigint) language sql stable security definer set s
   limit least(greatest(lim, 1), 50);
 $$;
 grant execute on function public.top_favorites(int) to anon, authenticated;
+
+-- ---------- žádosti o Play Along (přihlášený chce časy k písničce; admin je vidí v továrně) ----------
+create table if not exists public.along_requests (
+  song_id text not null references public.songs(id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  yt text,
+  created_at timestamptz not null default now(),
+  primary key (song_id, user_id)
+);
+alter table public.along_requests enable row level security;
+create policy "along_requests: přidat" on public.along_requests for insert to authenticated
+  with check (user_id = (select auth.uid())
+    and not coalesce(((select auth.jwt()) ->> 'is_anonymous')::boolean, false)
+    and (yt is null or yt ~ '^[A-Za-z0-9_-]{11}$')
+    and exists (select 1 from public.songs s where s.id = song_id));
+create policy "along_requests: číst" on public.along_requests for select to authenticated
+  using (user_id = (select auth.uid()) or (select public.is_admin()));
+create policy "along_requests: smazat" on public.along_requests for delete to authenticated
+  using (user_id = (select auth.uid()) or (select public.is_admin()));
+grant select, insert, delete on public.along_requests to authenticated;
+
+-- fronta automatických časů jen pro admina; přidat song jen s opravdovým účtem (ne anonymní host)
+drop policy "jobs: přidat" on public.jobs;
+create policy "jobs: přidat" on public.jobs for insert to authenticated
+  with check (created_by = auth.uid() and status = 'queued' and error is null and stats is null and is_admin()
+    and exists (select 1 from public.songs s where s.id = jobs.song_id));
+drop policy "songs: přidat jako já" on public.songs;
+create policy "songs: přidat jako já" on public.songs for insert to authenticated
+  with check (owner = auth.uid() and not coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false));

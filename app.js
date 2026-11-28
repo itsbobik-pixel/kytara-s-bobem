@@ -858,11 +858,8 @@ function renderLibrary() {
   renderTopActions([favToggle(favOnly), playlistsToggle(!!route.pl), auth.admin ? factoryToggle(false) : null].filter(Boolean));
 
   const addSong = async () => {
-    // přidat může i nepřihlášený: dostane anonymní účet, song čeká na schválení adminem
-    if (shared && !auth.user) {
-      try { await window.KSB_SUPA.signInAnon(); }
-      catch (e) { console.warn(e); if (needLogin('Pro přidání songu se přihlas. Číst může kdokoli.')) return; }
-    }
+    // přidat song může jen přihlášený (ne anonymní host); song čeká na schválení adminem
+    if (shared && (!auth.user || auth.anon)) { window.KSB_SUPA.openLogin('Pro přidání songu se přihlas. Číst může kdokoli.'); return; }
     openSongModal();
   };
   const wrap = h('div', { class: 'wrap' });
@@ -876,7 +873,7 @@ function renderLibrary() {
         ? h('h1', {}, 'Společný ', h('span', { class: 'hl' }, 'zpěvník'))
         : h('h1', {}, 'Tvoje ', h('span', { class: 'hl' }, 'songy')),
       h('p', {}, shared
-        ? 'Písničky s akordy pro všechny. Přidej i svoje, přihlášení není potřeba.'
+        ? 'Písničky s akordy pro všechny. Po přihlášení můžeš přidat i svoje.'
         : 'Vlož text, vyber tóninu a přetáhni akordy přímo nad slova.')),
     h('button', { class: 'btn rainbow big', onclick: addSong }, '+ Přidat song')));
 
@@ -1189,9 +1186,10 @@ function openSongModal(existing = null) {
     go('#song-' + song.id);
     const yt = typeof ytIdFrom === 'function' && st.audio?.yt ? ytIdFrom(st.audio.yt) : null;
     if (yt && auth.mode === 'supabase') {
-      window.KSB_SUPA.requestJob(song.id, yt)
+      if (auth.admin) window.KSB_SUPA.requestJob(song.id, yt)
         .then(() => toast('⏳ Play Along se připravuje – časy dopočítá pomocník.'))
         .catch(e => console.warn('Fronta', e));
+      else window.KSB_SUPA.requestAlong(song.id, yt).catch(e => console.warn('Žádost', e));
     }
   }
 
@@ -1403,9 +1401,39 @@ function alongButton(song) {
     watchJob(song);
     return h('span', { class: 'btn al-btn', title: 'Pomocník stáhne nahrávku a spočítá časy slov a akordů. Obvykle pár minut.' }, '⏳ Play Along se připravuje…');
   }
-  const mine = auth.admin || !song.owner || (auth.user && song.owner === auth.user.id);
-  if (!mine) return link;
-  return h('button', { class: 'btn al-btn', title: 'Vlož YouTube odkaz a časy slov a akordů se spočítají samy', onclick: e => askJob(e.currentTarget, song) }, '⏱ Vytvořit Play Along');
+  if (auth.admin) return h('button', { class: 'btn al-btn', title: 'Vlož YouTube odkaz a časy slov a akordů se spočítají samy', onclick: e => askJob(e.currentTarget, song) }, '⏱ Vytvořit Play Along');
+  if (sup.requested(song.id)) return h('span', { class: 'btn al-btn', title: 'Žádost máme – Play Along přidáme, jakmile to půjde.' }, '✓ Play Along požádán');
+  return h('button', { class: 'btn al-btn', title: 'Požádej o Play Along k téhle písničce – uvidíme to a přidáme ho', onclick: e => {
+    if (!auth.user || auth.anon) { sup.openLogin('Pro žádost o Play Along se přihlas.'); return; }
+    askRequest(e.currentTarget, song);
+  } }, '🙋 Request Play Along');
+}
+
+function askRequest(anchor, song) {
+  const input = h('input', { type: 'url', placeholder: 'https://www.youtube.com/watch?v=… (nepovinné)' });
+  const err = h('p', { class: 'form-err', role: 'alert' });
+  const btn = h('button', { class: 'btn primary' }, 'Požádat');
+  btn.onclick = async () => {
+    const v = input.value.trim();
+    const id = v ? ytIdFrom(v) : null;
+    if (v && !id) { err.textContent = 'Tohle nevypadá jako odkaz na YouTube.'; return; }
+    btn.disabled = true; btn.textContent = 'Posílám…'; err.textContent = '';
+    try {
+      await window.KSB_SUPA.requestAlong(song.id, id);
+      closePopover(); render();
+      toast('🙋 Díky! Žádost máme, Play Along přidáme, jakmile to půjde.');
+    } catch (e) {
+      console.warn(e);
+      btn.disabled = false; btn.textContent = 'Požádat';
+      err.textContent = 'Žádost se nepovedlo odeslat. Zkus to znovu.';
+    }
+  };
+  openPopover(anchor, h('div', { class: 'al-ytpop' },
+    h('b', {}, 'Request Play Along'),
+    h('p', { class: 'hint' }, 'Chceš k téhle písničce Play Along? Dej nám vědět. Když znáš nahrávku na YouTube, vlož odkaz – pomůže nám to.'),
+    input, err,
+    h('div', { class: 'modal-actions' }, h('button', { class: 'btn ghost', onclick: closePopover }, 'Zrušit'), btn)));
+  setTimeout(() => input.focus(), 30);
 }
 
 function askJob(anchor, song) {
@@ -1418,7 +1446,7 @@ function askJob(anchor, song) {
     btn.disabled = true; btn.textContent = 'Řadím do fronty…'; err.textContent = '';
     try {
       await window.KSB_SUPA.requestJob(song.id, id);
-      closePopover(); renderEditor();
+      closePopover(); render();
       toast('⏳ Hotovo za pár minut – Play Along se objeví sám.');
     } catch (e) {
       console.warn(e);

@@ -169,7 +169,7 @@ window.KSB_SUPA = (() => {
 
   async function reload({ quiet = false } = {}) {
     try {
-      const [list] = await Promise.all([fetchSongs(), fetchJobs(), fetchTop()]);
+      const [list] = await Promise.all([fetchSongs(), fetchJobs(), fetchTop(), fetchRequests()]);
       songs = list;
       rememberSynced(list);
       auth.loading = false;
@@ -484,6 +484,35 @@ window.KSB_SUPA = (() => {
     jobs.set(id, 'queued');
   }
 
+  // ---------- žádosti o Play Along (uživatel chce časy, admin je uvidí v továrně) ----------
+  const reqs = new Map();      // song id → [{ user_id, yt, created_at }] (admin vidí všechny, ostatní jen svoje)
+  async function fetchRequests() {
+    reqs.clear();
+    if (!auth.user || auth.anon) return;
+    const { data, error } = await sb.from('along_requests').select('song_id, user_id, yt, created_at').order('created_at', { ascending: true });
+    if (error) return;
+    for (const r of data) { if (!reqs.has(r.song_id)) reqs.set(r.song_id, []); reqs.get(r.song_id).push(r); }
+  }
+  const requests = id => reqs.get(id) || [];
+  const requested = id => !!auth.user && requests(id).some(r => r.user_id === auth.user.id);
+  const allRequests = () => reqs;
+  async function requestAlong(id, ytId) {
+    if (!auth.user || auth.anon) throw new Error('login');
+    schedule(0);
+    for (let i = 0; i < 40 && !inDb.has(id); i++) await new Promise(r => setTimeout(r, 250));
+    if (!inDb.has(id)) throw new Error('song není uložený');
+    const row = { song_id: id, yt: ytId || null };
+    const { error } = await sb.from('along_requests').insert(row);
+    if (error && !/duplicate|unique/i.test(error.message)) throw error;
+    if (!requested(id)) { if (!reqs.has(id)) reqs.set(id, []); reqs.get(id).push({ ...row, user_id: auth.user.id, created_at: new Date().toISOString() }); }
+  }
+  /** admin: žádosti k songu vyřízené / zamítnuté → smazat */
+  async function dismissRequests(id) {
+    const { error } = await sb.from('along_requests').delete().eq('song_id', id);
+    if (error) throw error;
+    reqs.delete(id);
+  }
+
   /** zjistí, jestli je úloha hotová; když ano, načte písničku znovu (s časy) */
   async function checkJob(id) {
     const { data } = await sb.from('jobs').select('status, error').eq('song_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -593,5 +622,5 @@ window.KSB_SUPA = (() => {
     toast(`Nahrávám ${list.length} songů do zpěvníku`);
   }
 
-  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, setFav, topFavs: () => top, playlists: () => pls, loadPlaylists, createPlaylist, updatePlaylist, deletePlaylist, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, importLocal, ensureLoaded, loadAll, approve };
+  return { init, schedule, openLogin, openNameModal, logout, signInAnon, saveNotation, setFav, topFavs: () => top, playlists: () => pls, loadPlaylists, createPlaylist, updatePlaylist, deletePlaylist, accountInfo, saveName, setPassword, requestJob, checkJob, jobStatus, jobFit, requestAlong, requests, requested, allRequests, dismissRequests, importLocal, ensureLoaded, loadAll, approve };
 })();

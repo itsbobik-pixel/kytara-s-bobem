@@ -22,6 +22,27 @@ function renderFactoryList() {
   const order = { beats: 0, chords: 1, nosync: 2, done: 3 };
   const list = songs.filter(facWanted)
     .sort((a, b) => (order[stageOf(a)] - order[stageOf(b)]) || (a.title || '').localeCompare(b.title || '', 'cs'));
+  // žádosti o Play Along (od přihlášených uživatelů)
+  const reqs = [...(window.KSB_SUPA?.allRequests?.() || new Map())]
+    .map(([id, rs]) => ({ s: songs.find(x => x.id === id), rs }))
+    .filter(r => r.s && !r.s.hasSync && !r.s.sync?.dur)
+    .sort((a, b) => b.rs.length - a.rs.length || (a.rs[0].created_at < b.rs[0].created_at ? -1 : 1));
+  if (reqs.length) {
+    const rl = h('ul', { class: 'fac-list fac-reqs' });
+    for (const { s, rs } of reqs) {
+      const yt = rs.find(r => r.yt)?.yt;
+      rl.append(h('li', {},
+        h('span', { class: 'fac-name' }, (s.artist ? s.artist + ' – ' : '') + (s.title || 'Bez názvu')),
+        h('span', { class: 'sl-pending', title: 'Kolik lidí o Play Along požádalo' }, `🙋 ${rs.length}×`),
+        yt ? h('a', { class: 'fac-stage', href: 'https://youtu.be/' + yt, target: '_blank', rel: 'noopener', title: 'Odkaz od uživatele' }, '▶ YouTube') : null,
+        window.KSB_SUPA.jobStatus(s.id) ? h('span', { class: 'sl-pending' }, '⏳ připravuje se')
+          : h('button', { class: 'btn primary', onclick: e => askJob(e.currentTarget, { ...s, sync: yt ? { yt } : s.sync, id: s.id }) }, '⏱ Vytvořit'),
+        h('button', { class: 'btn ghost', title: 'Smazat žádost', onclick: async () => {
+          try { await window.KSB_SUPA.dismissRequests(s.id); renderFactoryList(); } catch { toast('Nepovedlo se smazat.'); }
+        } }, '✕')));
+    }
+    wrap.append(h('h2', {}, '🙋 Žádosti o Play Along'), rl, h('h2', {}, 'Rozpracované'));
+  }
   const ul = h('ul', { class: 'fac-list' });
   if (!list.length) ul.append(h('li', {}, h('span', { class: 'fac-name' }, 'Všechno je hotové 🎉')));
   for (const s of list) {
