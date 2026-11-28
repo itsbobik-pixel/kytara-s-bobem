@@ -1,0 +1,37 @@
+name: stránky písniček (SEO)
+
+# Jednou denně (a ručně) vygeneruje pisen/<slug>/index.html + sitemap.xml z veřejných schválených songů.
+# Bez textů písní – jen názvy, tónina a akordy. Dotaz do Supabase navíc drží projekt vzhůru (Free se uspí po 7 dnech).
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['helper/build_pages.mjs', '.github/workflows/pages.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: song-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node helper/build_pages.mjs
+      - name: Commit, když se něco změnilo
+        run: |
+          git add -A pisen sitemap.xml
+          if git diff --cached --quiet; then echo "Beze změn."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Stránky písniček: automatická aktualizace"
+          git pull --rebase
+          git push
