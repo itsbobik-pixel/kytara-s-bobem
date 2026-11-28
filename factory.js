@@ -50,6 +50,7 @@ function renderFactoryList() {
     for (const r of sreqs) {
       sl.append(h('li', {},
         h('span', { class: 'fac-name' }, r.artist + ' – ' + r.title),
+        (r.requester_name || r.requester_email) ? h('span', { class: 'sl-pending', title: r.requester_email ? 'Požádal(a): ' + r.requester_email : 'Kdo požádal' }, '👤 ' + (r.requester_name || r.requester_email)) : null,
         h('span', { class: 'sl-pending', title: 'Kdy přišla žádost' }, new Date(r.created_at).toLocaleDateString('cs-CZ')),
         r.notified_at ? h('span', { class: 'sl-pending', title: 'Písnička je zveřejněná, žadateli odešel e-mail' }, '📧 posláno') : null,
         r.yt ? h('a', { class: 'fac-stage', href: 'https://youtu.be/' + r.yt, target: '_blank', rel: 'noopener', title: 'Odkaz od uživatele' }, '▶ YouTube') : null,

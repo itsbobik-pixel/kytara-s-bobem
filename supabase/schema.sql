@@ -267,3 +267,6 @@ alter table public.song_requests add column if not exists song_id text reference
 alter table public.song_requests add column if not exists notified_at timestamptz;
 -- funkce public.norm_name(text), public.notify_song_requests() a trigger songs_notify_requests
 -- (after insert or update of approved, is_public on songs) – celé znění v migraci song_request_email
+-- kdo o song požádal (vyplní trigger song_requests_requester z auth.users: přezdívka + e-mail; vidí jen admin a žadatel)
+alter table public.song_requests add column if not exists requester_name text;
+alter table public.song_requests add column if not exists requester_email text;
